@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Skull, RotateCcw, Home } from 'lucide-react';
+import { Trophy, Skull, RotateCcw, Home, X } from 'lucide-react';
 import { Team } from '../types/game';
 
 interface GameOverModalProps {
@@ -9,6 +9,7 @@ interface GameOverModalProps {
   reason?: string;
   onNewGame: () => void;
   onGoHome: () => void;
+  onClose?: () => void; // Optional close button handler
 }
 
 export function GameOverModal({
@@ -18,6 +19,7 @@ export function GameOverModal({
   reason,
   onNewGame,
   onGoHome,
+  onClose,
 }: GameOverModalProps) {
   // User wins if the winner matches their team
   const isWin = winner === userTeam;
@@ -39,10 +41,20 @@ export function GameOverModal({
             transition={{ type: 'spring', damping: 20 }}
             className={`relative overflow-hidden rounded-2xl p-8 max-w-md w-full text-center ${
               isWin
-                ? 'bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-300'
-                : 'bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300'
+                ? 'bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-300'
+                : 'bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-gray-300'
             }`}
           >
+            {/* Close button */}
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="absolute top-3 right-3 p-2 rounded-full hover:bg-black/10 transition-colors z-10"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            )}
             {/* Background decoration */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
               {isWin ? (
@@ -73,13 +85,13 @@ export function GameOverModal({
               animate={{ scale: 1 }}
               transition={{ delay: 0.2, type: 'spring', damping: 10 }}
               className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-6 ${
-                isWin ? 'bg-red-200' : 'bg-blue-200'
+                isWin ? 'bg-green-200' : 'bg-gray-200'
               }`}
             >
               {isAssassin ? (
-                <Skull className={`w-10 h-10 ${isWin ? 'text-red-600' : 'text-blue-600'}`} />
+                <Skull className={`w-10 h-10 ${isWin ? 'text-green-600' : 'text-red-600'}`} />
               ) : (
-                <Trophy className={`w-10 h-10 ${isWin ? 'text-red-600' : 'text-blue-600'}`} />
+                <Trophy className={`w-10 h-10 ${isWin ? 'text-green-600' : 'text-gray-600'}`} />
               )}
             </motion.div>
 
@@ -89,7 +101,7 @@ export function GameOverModal({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
               className={`font-display text-3xl font-bold mb-3 ${
-                isWin ? 'text-red-600' : 'text-blue-600'
+                isWin ? 'text-green-600' : 'text-gray-700'
               }`}
             >
               {isWin ? 'Victory!' : 'Game Over'}
@@ -123,7 +135,7 @@ export function GameOverModal({
                 onClick={onNewGame}
                 className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 font-display font-semibold rounded-xl transition-colors shadow-md ${
                   isWin
-                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                    ? 'bg-green-500 hover:bg-green-600 text-white'
                     : 'bg-blue-500 hover:bg-blue-600 text-white'
                 }`}
               >

@@ -2,10 +2,9 @@
  * CLUE VALIDATION
  * ================
  * 
- * TODO: AI-Enhanced Validation
- * ----------------------------
+ * Validates clues using both local rules and AI-powered semantic checking.
  * 
- * Current implementation does basic checks:
+ * Local validation (fast):
  * - Empty clue
  * - Multiple words
  * - Exact match with board words
@@ -13,30 +12,14 @@
  * - Minimum length
  * - Numbers only
  * 
- * Future AI integration should add:
- * 
- * 1. SEMANTIC SIMILARITY CHECK
- *    - Use embeddings to check if clue is too similar to board words
- *    - Example: "AUTOMOBILE" should be flagged for "CAR" on board
- *    - Threshold can be tuned based on difficulty setting
- * 
- * 2. COMPOUND WORD DETECTION
- *    - Detect if clue is a compound of board words
- *    - Example: "SUNFLOWER" when "SUN" and "FLOWER" are on board
- * 
- * 3. PROPER NOUN VALIDATION
- *    - Check if clue is a proper noun (allowed but flagged)
- *    - Consider profile.culturalContext for regional names
- * 
- * 4. FOREIGN WORD DETECTION
- *    - If profile.language is set, check for foreign words
- *    - May want to warn or disallow based on game rules
- * 
- * 5. OFFENSIVE CONTENT CHECK
- *    - Use moderation API to flag inappropriate clues
+ * AI validation (via Gemini):
+ * - Semantic similarity check
+ * - Compound word detection
+ * - Derivative form detection
  */
 
 import { ValidationResult, WordCard } from '../types/game';
+import { validateClueWithAI } from './ai-agents';
 
 // ============================================
 // MAIN VALIDATION FUNCTION
@@ -175,36 +158,30 @@ export function validateClueNumber(
 }
 
 // ============================================
-// FUTURE: AI-ENHANCED VALIDATION
+// AI-ENHANCED VALIDATION
 // ============================================
 
 /**
- * TODO: Implement AI-enhanced validation
- * 
- * export async function validateClueWithAI(
- *   clue: string,
- *   boardWords: WordCard[],
- *   profile: UserProfile
- * ): Promise<ValidationResult> {
- *   // First run basic validation
- *   const basicResult = validateClue(clue, boardWords);
- *   if (!basicResult.valid) return basicResult;
- *   
- *   // Then check semantic similarity using embeddings
- *   const embeddings = await getEmbeddings([clue, ...boardWords.map(w => w.word)]);
- *   const clueEmbedding = embeddings[0];
- *   const wordEmbeddings = embeddings.slice(1);
- *   
- *   for (let i = 0; i < wordEmbeddings.length; i++) {
- *     const similarity = cosineSimilarity(clueEmbedding, wordEmbeddings[i]);
- *     if (similarity > SIMILARITY_THRESHOLD) {
- *       return {
- *         valid: false,
- *         reason: `"${clue}" is too similar to "${boardWords[i].word}" on the board.`,
- *       };
- *     }
- *   }
- *   
- *   return { valid: true };
- * }
+ * Validates a clue using AI for semantic checking
+ * Falls back to local validation on API error
  */
+export async function validateClueAsync(
+  clue: string,
+  boardWords: WordCard[]
+): Promise<ValidationResult> {
+  // First run basic local validation
+  const basicResult = validateClue(clue, boardWords);
+  if (!basicResult.valid) {
+    return basicResult;
+  }
+
+  // Then run AI validation for semantic checks
+  try {
+    const wordStrings = boardWords.map(w => w.word);
+    const aiResult = await validateClueWithAI(clue, wordStrings);
+    return aiResult;
+  } catch (error) {
+    console.error('AI validation failed, using local result:', error);
+    return basicResult;
+  }
+}

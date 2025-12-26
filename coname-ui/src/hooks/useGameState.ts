@@ -15,7 +15,7 @@ import {
   generateId,
   createTurnEvent,
 } from '../utils/gameLogic';
-import { aiSpymasterStub, aiGuesserStub, rivalTurnStub } from '../utils/ai-stubs';
+import { aiSpymaster, aiGuesser, rivalTurn } from '../utils/ai-agents';
 
 // Default profile - enhanced for AI context
 const DEFAULT_PROFILE: UserProfile = {
@@ -69,13 +69,12 @@ interface AppState {
   startNewGame: () => void;
   resumeGame: () => boolean;
   hasExistingGame: () => boolean;
-  resetGame: () => void;
 
   // Spymaster actions (user is spymaster)
-  submitClue: (clue: string, number: number) => void;
+  submitClue: (clue: string, number: number) => Promise<void>;
 
   // Guesser actions (user is guesser)
-  requestAIClue: () => void;
+  requestAIClue: () => Promise<void>;
   
   // Iterative guessing - single word at a time
   makeGuess: (word: string) => { result: 'correct' | 'wrong' | 'neutral' | 'assassin'; category: CardCategory; continueGuessing: boolean };
@@ -87,6 +86,10 @@ interface AppState {
   // Turn management
   endTurn: () => void;
   processRivalTurn: () => Promise<void>;
+  
+  // Game cancellation (when navigating away mid-game)
+  gameCancelled: boolean;
+  cancelGame: () => void;
 }
 
 export const useAppState = create<AppState>()(
@@ -95,6 +98,13 @@ export const useAppState = create<AppState>()(
       // Navigation
       currentPage: 'welcome',
       setCurrentPage: (page) => set({ currentPage: page }),
+      
+      // Game cancellation
+      gameCancelled: false,
+      cancelGame: () => {
+        console.log('🛑 [GAME] Game cancelled - stopping all AI processes');
+        set({ gameCancelled: true });
+      },
 
       // User profile
       profile: DEFAULT_PROFILE,
@@ -124,9 +134,12 @@ export const useAppState = create<AppState>()(
       startNewGame: () => {
         const { settings } = get();
         
+        // Get language from localStorage
+        const language = (localStorage.getItem('coname-language') || 'en') as 'en' | 'he';
+        
         // Randomize who starts (50/50 chance)
         const startingTeam: Team = Math.random() < 0.5 ? 'teamA' : 'teamB';
-        const board = generateBoard(startingTeam);
+        const board = generateBoard(startingTeam, language);
         
         const newGame: GameState = {
           id: generateId(),
@@ -146,7 +159,7 @@ export const useAppState = create<AppState>()(
           turnShouldEnd: false,
           startingTeam,
         };
-        set({ game: newGame, currentPage: 'game', showSurvey: false });
+        set({ game: newGame, currentPage: 'game', showSurvey: false, gameCancelled: false });
       },
 
       resumeGame: () => {
@@ -163,18 +176,13 @@ export const useAppState = create<AppState>()(
         return game !== null && game.status === 'playing';
       },
 
-      resetGame: () => {
-        set({ game: null });
-      },
-
       // Spymaster actions - submit clue and prepare AI guesses
-      submitClue: (clue, number) => {
-        const { game, profile } = get();
-        if (!game) return;
+      submitClue: async (clue, number) => {
+        const { game, profile, gameCancelled } = get();
+        if (!game || gameCancelled) return;
 
-        // Get AI's planned guesses for the user's team (AI is guesser for user's team)
+        // Set initial state with loading
         const userTeam = game.settings.playerTeam === 'red' ? 'teamA' : 'teamB';
-        const aiResponse = aiGuesserStub(clue, number === -1 ? 9 : number, game.board, userTeam, profile, game.turnHistory, true);
         const guessesAllowed = number === 0 || number === -1 ? 99 : number + 1;
 
         set({
@@ -187,36 +195,109 @@ export const useAppState = create<AppState>()(
             currentTurnResults: [],
             turnStartTime: Date.now(),
             phaseTimeLimit: getPhaseTimeLimit(get().settings.timerMinutes),
-            aiPlannedGuesses: aiResponse.guesses,
+            aiPlannedGuesses: undefined, // Will be populated after AI call
             turnShouldEnd: false,
           },
         });
+
+        // Get AI's planned guesses asynchronously
+        try {
+          const aiResponse = await aiGuesser(
+            clue,
+            number === -1 ? 9 : number,
+            game.board,
+            userTeam,
+            profile,
+            game.turnHistory
+          );
+          
+          // Check if cancelled during API call
+          if (get().gameCancelled) return;
+          
+          // Update with AI guesses
+          const currentGame = get().game;
+          if (currentGame && currentGame.currentClue?.word === clue) {
+            set({
+              game: {
+                ...currentGame,
+                aiPlannedGuesses: aiResponse.guesses,
+              },
+            });
+          }
+        } catch (error) {
+          console.error('Error getting AI guesses:', error);
+          // Fallback: pick random team words
+          const teamWords = game.board.cards
+            .filter(c => c.category === userTeam && !c.revealed)
+            .map(c => c.word);
+          const shuffled = [...teamWords].sort(() => Math.random() - 0.5);
+          const currentGame = get().game;
+          if (currentGame) {
+            set({
+              game: {
+                ...currentGame,
+                aiPlannedGuesses: shuffled.slice(0, Math.min(number + 1, shuffled.length)),
+              },
+            });
+          }
+        }
       },
 
       // Guesser actions - get AI clue
-      requestAIClue: () => {
-        const { game, profile } = get();
-        if (!game) return;
+      requestAIClue: async () => {
+        const { game, profile, gameCancelled } = get();
+        if (!game || gameCancelled) return;
 
         // Get AI clue for the user's team (AI is spymaster for user's team)
         const userTeam = game.settings.playerTeam === 'red' ? 'teamA' : 'teamB';
-        const aiResponse = aiSpymasterStub(game.board, userTeam, profile, game.turnHistory);
-        const guessesAllowed = aiResponse.number === 0 || aiResponse.number === -1 ? 99 : aiResponse.number + 1;
 
-        set({
-          game: {
-            ...game,
-            currentClue: { word: aiResponse.clue, number: aiResponse.number },
-            currentPhase: 'guess',
-            guessesRemaining: guessesAllowed,
-            currentTurnGuesses: [],
-            currentTurnResults: [],
-            turnStartTime: Date.now(),
-            phaseTimeLimit: getPhaseTimeLimit(get().settings.timerMinutes),
-            aiPlannedGuesses: [],
-            turnShouldEnd: false,
-          },
-        });
+        try {
+          const aiResponse = await aiSpymaster(
+            game.board,
+            userTeam,
+            profile,
+            game.turnHistory
+          );
+          
+          // Check if cancelled during API call
+          if (get().gameCancelled) return;
+          
+          const guessesAllowed = aiResponse.number === 0 || aiResponse.number === -1 ? 99 : aiResponse.number + 1;
+
+          set({
+            game: {
+              ...game,
+              currentClue: { word: aiResponse.clue, number: aiResponse.number },
+              currentPhase: 'guess',
+              guessesRemaining: guessesAllowed,
+              currentTurnGuesses: [],
+              currentTurnResults: [],
+              turnStartTime: Date.now(),
+              phaseTimeLimit: getPhaseTimeLimit(get().settings.timerMinutes),
+              aiPlannedGuesses: [],
+              turnShouldEnd: false,
+            },
+          });
+        } catch (error) {
+          console.error('Error getting AI clue:', error);
+          // Don't set fallback if cancelled
+          if (get().gameCancelled) return;
+          // Fallback clue
+          set({
+            game: {
+              ...game,
+              currentClue: { word: 'HINT', number: 2 },
+              currentPhase: 'guess',
+              guessesRemaining: 3,
+              currentTurnGuesses: [],
+              currentTurnResults: [],
+              turnStartTime: Date.now(),
+              phaseTimeLimit: getPhaseTimeLimit(get().settings.timerMinutes),
+              aiPlannedGuesses: [],
+              turnShouldEnd: false,
+            },
+          });
+        }
       },
 
       // Get next AI guess
@@ -346,8 +427,12 @@ export const useAppState = create<AppState>()(
 
       // Process rival turn iteratively
       processRivalTurn: async () => {
-        const { game } = get();
+        const { game, gameCancelled } = get();
         if (!game || game.status !== 'playing') return;
+        if (gameCancelled) {
+          console.log('🛑 [RIVAL TURN] Game cancelled, aborting');
+          return;
+        }
         
         // Only process if we're in clue phase
         if (game.currentPhase !== 'clue') return;
@@ -358,55 +443,92 @@ export const useAppState = create<AppState>()(
           return; // It's user's turn, don't process
         }
 
-        // First, generate the clue
-        const rivalResult = rivalTurnStub(game.board, game.currentTeam);
-        
-        // Set the clue and enter guess phase
-        set({
-          game: {
-            ...game,
-            currentClue: { word: rivalResult.clue, number: rivalResult.number },
-            currentPhase: 'guess',
-            guessesRemaining: rivalResult.guesses.length,
-            currentTurnGuesses: [],
-            currentTurnResults: [],
-            turnStartTime: Date.now(),
-            phaseTimeLimit: getPhaseTimeLimit(get().settings.timerMinutes),
-            aiPlannedGuesses: rivalResult.guesses,
-            turnShouldEnd: false,
-          },
-        });
-
-        // Wait to show the clue
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Process each guess one by one with delay
-        for (const guess of rivalResult.guesses) {
-          await new Promise(resolve => setTimeout(resolve, 2500));
-
-          const { game: updatedGame } = get();
-          if (!updatedGame || updatedGame.status === 'gameOver') break;
-
-          const card = updatedGame.board.cards.find(c => c.word === guess && !c.revealed);
-          if (!card) continue;
-
-          const { result } = get().makeGuess(guess);
-
-          // Wait to show the result
-          await new Promise(resolve => setTimeout(resolve, 1500));
-
-          // If wrong guess, break
-          if (result !== 'correct') {
-            break;
+        try {
+          // First, generate the clue using AI
+          const rivalResult = await rivalTurn(
+            game.board,
+            game.currentTeam,
+            game.turnHistory
+          );
+          
+          // Check if cancelled during API call
+          if (get().gameCancelled) {
+            console.log('🛑 [RIVAL TURN] Game cancelled after clue generation, aborting');
+            return;
           }
-        }
+          
+          // Set the clue and enter guess phase
+          set({
+            game: {
+              ...game,
+              currentClue: { word: rivalResult.clue, number: rivalResult.number },
+              currentPhase: 'guess',
+              guessesRemaining: rivalResult.guesses.length,
+              currentTurnGuesses: [],
+              currentTurnResults: [],
+              turnStartTime: Date.now(),
+              phaseTimeLimit: getPhaseTimeLimit(get().settings.timerMinutes),
+              aiPlannedGuesses: rivalResult.guesses,
+              turnShouldEnd: false,
+            },
+          });
 
-        // End rival turn after delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        const { game: finalGame } = get();
-        if (finalGame && finalGame.status === 'playing') {
-          get().endGuessingPhase();
+          // Wait to show the clue
+          await new Promise(resolve => setTimeout(resolve, 2500));
+          
+          // Check if cancelled during wait
+          if (get().gameCancelled) {
+            console.log('🛑 [RIVAL TURN] Game cancelled, aborting');
+            return;
+          }
+
+          // If rival AI decided to pass (no guesses), end turn immediately
+          if (rivalResult.guesses.length === 0) {
+            console.log('🤖 [RIVAL TURN] Rival AI decided to PASS - no guesses');
+            const { game: finalGame, gameCancelled: cancelled } = get();
+            if (finalGame && finalGame.status === 'playing' && !cancelled) {
+              get().endGuessingPhase();
+            }
+            return;
+          }
+
+          // Process each guess one by one with delay
+          for (const guess of rivalResult.guesses) {
+            await new Promise(resolve => setTimeout(resolve, 2500));
+
+            const { game: updatedGame, gameCancelled: cancelled } = get();
+            if (!updatedGame || updatedGame.status === 'gameOver' || cancelled) {
+              if (cancelled) console.log('🛑 [RIVAL TURN] Game cancelled during guessing, aborting');
+              break;
+            }
+
+            const card = updatedGame.board.cards.find(c => c.word === guess && !c.revealed);
+            if (!card) continue;
+
+            const { result } = get().makeGuess(guess);
+
+            // Wait to show the result
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            // If wrong guess, break
+            if (result !== 'correct') {
+              break;
+            }
+          }
+
+          // End rival turn after delay
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          const { game: finalGame, gameCancelled: cancelled } = get();
+          if (finalGame && finalGame.status === 'playing' && !cancelled) {
+            get().endGuessingPhase();
+          }
+        } catch (error) {
+          console.error('Error processing rival turn:', error);
+          // Fallback: end turn (only if not cancelled)
+          if (!get().gameCancelled) {
+            get().endGuessingPhase();
+          }
         }
       },
 

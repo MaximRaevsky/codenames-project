@@ -1,53 +1,85 @@
 import { BoardState, WordCard, CardCategory, Team, TurnEvent } from '../types/game';
+import type { Language } from '../i18n/translations';
 
-// Large word bank for variety
-const WORD_BANK = [
-  'AMAZON', 'ANGEL', 'ANTARCTICA', 'APPLE', 'ARM', 'ATLANTIS', 'AUSTRALIA',
+// Official Codenames word bank (400 words)
+const WORD_BANK_EN = [
+  'AFRICA', 'AGENT', 'AIR', 'ALIEN', 'ALPS', 'AMAZON', 'AMBULANCE', 'AMERICA',
+  'ANGEL', 'ANTARCTICA', 'APPLE', 'ARM', 'ATLANTIS', 'AUSTRALIA', 'AZTEC',
   'BACK', 'BALL', 'BAND', 'BANK', 'BAR', 'BARK', 'BAT', 'BATTERY', 'BEACH',
-  'BEAR', 'BEAT', 'BED', 'BERLIN', 'BERRY', 'BOARD', 'BOLT', 'BOMB', 'BOND',
-  'BOOM', 'BOOT', 'BOTTLE', 'BOW', 'BOX', 'BRIDGE', 'BRUSH', 'BUFFALO', 'BUG',
-  'BUGLE', 'BUTTON', 'CALF', 'CANADA', 'CAP', 'CAPITAL', 'CAR', 'CARD', 'CARROT',
-  'CASINO', 'CAST', 'CAT', 'CELL', 'CENTAUR', 'CENTER', 'CHAIR', 'CHANGE', 'CHARGE',
-  'CHECK', 'CHEST', 'CHICK', 'CHINA', 'CHOCOLATE', 'CHURCH', 'CIRCLE', 'CLIFF',
-  'CLOAK', 'CLUB', 'CODE', 'COLD', 'COMIC', 'COMPOUND', 'CONCERT', 'CONDUCTOR',
-  'CONTRACT', 'COOK', 'COPPER', 'COTTON', 'COURT', 'COVER', 'CRANE', 'CRASH',
-  'CRICKET', 'CROSS', 'CROWN', 'CYCLE', 'CZECH', 'DANCE', 'DATE', 'DAY', 'DEATH',
-  'DECK', 'DEGREE', 'DIAMOND', 'DICE', 'DINOSAUR', 'DISEASE', 'DOCTOR', 'DOG',
-  'DRAFT', 'DRAGON', 'DRESS', 'DRILL', 'DROP', 'DRUM', 'DUCK', 'DWARF', 'EAGLE',
-  'EGYPT', 'EMBASSY', 'ENGINE', 'ENGLAND', 'EUROPE', 'EYE', 'FACE', 'FAIR', 'FALL',
-  'FAN', 'FENCE', 'FIELD', 'FIGHTER', 'FIGURE', 'FILE', 'FILM', 'FIRE', 'FISH',
-  'FLUTE', 'FLY', 'FOOT', 'FORCE', 'FOREST', 'FORK', 'FRANCE', 'GAME', 'GAS',
-  'GENIUS', 'GERMANY', 'GHOST', 'GIANT', 'GLASS', 'GLOVE', 'GOLD', 'GRACE', 'GRASS',
-  'GREECE', 'GREEN', 'GROUND', 'HAM', 'HAND', 'HAWK', 'HEAD', 'HEART', 'HELICOPTER',
-  'HIMALAYAS', 'HOLE', 'HOLLYWOOD', 'HONEY', 'HOOD', 'HOOK', 'HORN', 'HORSE',
-  'HORSESHOE', 'HOSPITAL', 'HOTEL', 'ICE', 'ICELAND', 'IMAGE', 'INDIA', 'IRON',
-  'IVORY', 'JACK', 'JAM', 'JET', 'JUPITER', 'KANGAROO', 'KETCHUP', 'KEY', 'KID',
-  'KING', 'KIWI', 'KNIFE', 'KNIGHT', 'LAB', 'LAP', 'LASER', 'LAWYER', 'LEAD', 'LEMON',
-  'LEPRECHAUN', 'LIFE', 'LIGHT', 'LIMOUSINE', 'LINE', 'LINK', 'LION', 'LITTER',
-  'LOCH', 'LOCK', 'LOG', 'LONDON', 'LUCK', 'MAIL', 'MAMMOTH', 'MAPLE', 'MARBLE',
-  'MARCH', 'MASS', 'MATCH', 'MERCURY', 'MEXICO', 'MICROSCOPE', 'MILLIONAIRE',
-  'MINE', 'MINT', 'MISSILE', 'MODEL', 'MOLE', 'MOON', 'MOSCOW', 'MOUNT', 'MOUSE',
-  'MOUTH', 'MUG', 'NAIL', 'NEEDLE', 'NET', 'NEW', 'NIGHT', 'NINJA', 'NOTE', 'NOVEL',
+  'BEAR', 'BEAT', 'BED', 'BEIJING', 'BELL', 'BELT', 'BERLIN', 'BERMUDA', 'BERRY',
+  'BILL', 'BLOCK', 'BOARD', 'BOLT', 'BOMB', 'BOND', 'BOOM', 'BOOT', 'BOTTLE',
+  'BOW', 'BOX', 'BRIDGE', 'BRUSH', 'BUCK', 'BUFFALO', 'BUG', 'BUGLE', 'BUTTON',
+  'CALF', 'CANADA', 'CAP', 'CAPITAL', 'CAR', 'CARD', 'CARROT', 'CASINO', 'CAST',
+  'CAT', 'CELL', 'CENTAUR', 'CENTER', 'CHAIR', 'CHANGE', 'CHARGE', 'CHECK',
+  'CHEST', 'CHICK', 'CHINA', 'CHOCOLATE', 'CHURCH', 'CIRCLE', 'CLIFF', 'CLOAK',
+  'CLUB', 'CODE', 'COLD', 'COMIC', 'COMPOUND', 'CONCERT', 'CONDUCTOR', 'CONTRACT',
+  'COOK', 'COPPER', 'COTTON', 'COURT', 'COVER', 'CRANE', 'CRASH', 'CRICKET',
+  'CROSS', 'CROWN', 'CYCLE', 'CZECH', 'DANCE', 'DATE', 'DAY', 'DEATH', 'DECK',
+  'DEGREE', 'DIAMOND', 'DICE', 'DINOSAUR', 'DISEASE', 'DOCTOR', 'DOG', 'DRAFT',
+  'DRAGON', 'DRESS', 'DRILL', 'DROP', 'DUCK', 'DWARF', 'EAGLE', 'EGYPT', 'EMBASSY',
+  'ENGINE', 'ENGLAND', 'EUROPE', 'EYE', 'FACE', 'FAIR', 'FALL', 'FAN', 'FENCE',
+  'FIELD', 'FIGHTER', 'FIGURE', 'FILE', 'FILM', 'FIRE', 'FISH', 'FLUTE', 'FLY',
+  'FOOT', 'FORCE', 'FOREST', 'FORK', 'FRANCE', 'GAME', 'GAS', 'GENIUS', 'GERMANY',
+  'GHOST', 'GIANT', 'GLASS', 'GLOVE', 'GOLD', 'GRACE', 'GRASS', 'GREECE', 'GREEN',
+  'GROUND', 'HAM', 'HAND', 'HAWK', 'HEAD', 'HEART', 'HELICOPTER', 'HIMALAYAS',
+  'HOLE', 'HOLLYWOOD', 'HONEY', 'HOOD', 'HOOK', 'HORN', 'HORSE', 'HORSESHOE',
+  'HOSPITAL', 'HOTEL', 'ICE', 'ICE CREAM', 'INDIA', 'IRON', 'IVORY', 'JACK',
+  'JAM', 'JET', 'JUPITER', 'KANGAROO', 'KETCHUP', 'KEY', 'KID', 'KING', 'KIWI',
+  'KNIFE', 'KNIGHT', 'LAB', 'LAP', 'LASER', 'LAWYER', 'LEAD', 'LEMON', 'LEPRECHAUN',
+  'LIFE', 'LIGHT', 'LIMOUSINE', 'LINE', 'LINK', 'LION', 'LITTER', 'LOCH NESS',
+  'LOCK', 'LOG', 'LONDON', 'LUCK', 'MAIL', 'MAMMOTH', 'MAPLE', 'MARBLE', 'MARCH',
+  'MASS', 'MATCH', 'MERCURY', 'MEXICO', 'MICROSCOPE', 'MILLIONAIRE', 'MINE',
+  'MINT', 'MISSILE', 'MODEL', 'MOLE', 'MOON', 'MOSCOW', 'MOUNT', 'MOUSE', 'MOUTH',
+  'MUG', 'NAIL', 'NEEDLE', 'NET', 'NEW YORK', 'NIGHT', 'NINJA', 'NOTE', 'NOVEL',
   'NURSE', 'NUT', 'OCTOPUS', 'OIL', 'OLIVE', 'OLYMPUS', 'OPERA', 'ORANGE', 'ORGAN',
   'PALM', 'PAN', 'PANTS', 'PAPER', 'PARACHUTE', 'PARK', 'PART', 'PASS', 'PASTE',
   'PENGUIN', 'PHOENIX', 'PIANO', 'PIE', 'PILOT', 'PIN', 'PIPE', 'PIRATE', 'PISTOL',
   'PIT', 'PITCH', 'PLANE', 'PLASTIC', 'PLATE', 'PLATYPUS', 'PLAY', 'PLOT', 'POINT',
-  'POISON', 'POLE', 'POLICE', 'POOL', 'PORT', 'POST', 'POUND', 'PRESS', 'PRINCE',
-  'PRINCESS', 'PRISON', 'PUPIL', 'PYRAMID', 'QUEEN', 'RABBIT', 'RACKET', 'RAY',
-  'REVOLUTION', 'RING', 'ROBIN', 'ROBOT', 'ROCK', 'ROME', 'ROOT', 'ROSE', 'ROULETTE',
-  'ROUND', 'ROW', 'RULER', 'SATELLITE', 'SATURN', 'SCALE', 'SCHOOL', 'SCIENTIST',
-  'SCORPION', 'SCREEN', 'SCUBA', 'SEAL', 'SERVER', 'SHADOW', 'SHAKESPEARE', 'SHARK',
-  'SHED', 'SHEET', 'SHELL', 'SHIP', 'SHOE', 'SHOP', 'SHOT', 'SHOWER', 'SINK', 'SKYSCRAPER',
-  'SLIP', 'SLUG', 'SMUGGLER', 'SNAP', 'SNOW', 'SNOWMAN', 'SOCK', 'SOLDIER', 'SOUL',
-  'SOUND', 'SPACE', 'SPELL', 'SPIDER', 'SPIKE', 'SPINE', 'SPOT', 'SPRING', 'SPY',
-  'SQUARE', 'STADIUM', 'STAFF', 'STAR', 'STATE', 'STICK', 'STOCK', 'STRAW', 'STREAM',
-  'STRIKE', 'STRING', 'SUB', 'SUIT', 'SUPERHERO', 'SWING', 'SWITCH', 'TABLE', 'TABLET',
-  'TAG', 'TAIL', 'TAP', 'TEACHER', 'TELESCOPE', 'TEMPLE', 'THIEF', 'THUMB', 'TICK',
-  'TIE', 'TIME', 'TOKYO', 'TOOTH', 'TORCH', 'TOWER', 'TRACK', 'TRAIN', 'TRIANGLE',
-  'TRIP', 'TRUNK', 'TUBE', 'TURKEY', 'UNDERTAKER', 'UNICORN', 'VACUUM', 'VAN', 'VET',
-  'WAKE', 'WALL', 'WAR', 'WASHER', 'WASHINGTON', 'WATCH', 'WATER', 'WAVE', 'WEB',
-  'WELL', 'WHALE', 'WHIP', 'WIND', 'WITCH', 'WORM', 'YARD'
+  'POISON', 'POLE', 'POLICE', 'POOL', 'PORT', 'POST', 'POUND', 'PRESS', 'PRINCESS',
+  'PUMPKIN', 'PUPIL', 'PYRAMID', 'QUEEN', 'RABBIT', 'RACKET', 'RAY', 'REVOLUTION',
+  'RING', 'ROBIN', 'ROBOT', 'ROCK', 'ROME', 'ROOT', 'ROSE', 'ROULETTE', 'ROUND',
+  'ROW', 'RULER', 'SATELLITE', 'SATURN', 'SCALE', 'SCHOOL', 'SCIENTIST', 'SCORPION',
+  'SCREEN', 'SCUBA DIVER', 'SEAL', 'SERVER', 'SHADOW', 'SHAKESPEARE', 'SHARK',
+  'SHIP', 'SHOE', 'SHOP', 'SHOT', 'SINK', 'SKYSCRAPER', 'SLIP', 'SLUG', 'SMUGGLER',
+  'SNOW', 'SNOWMAN', 'SOCK', 'SOLDIER', 'SOUL', 'SOUND', 'SPACE', 'SPELL', 'SPIDER',
+  'SPIKE', 'SPINE', 'SPOT', 'SPRING', 'SPY', 'SQUARE', 'STADIUM', 'STAFF', 'STAR',
+  'STATE', 'STICK', 'STOCK', 'STRAW', 'STREAM', 'STRIKE', 'STRING', 'SUB', 'SUIT',
+  'SUPERHERO', 'SWING', 'SWITCH', 'TABLE', 'TABLET', 'TAG', 'TAIL', 'TAP', 'TEACHER',
+  'TELESCOPE', 'TEMPLE', 'THEATER', 'THIEF', 'THUMB', 'TICK', 'TIE', 'TIME', 'TOKYO',
+  'TOOTH', 'TORCH', 'TOWER', 'TRACK', 'TRAIN', 'TRIANGLE', 'TRIP', 'TRUNK', 'TUBE',
+  'TURKEY', 'UNDERTAKER', 'UNICORN', 'VACUUM', 'VAN', 'VET', 'WAKE', 'WALL', 'WAR',
+  'WASHER', 'WASHINGTON', 'WATCH', 'WATER', 'WAVE', 'WEB', 'WELL', 'WHALE', 'WHIP',
+  'WIND', 'WITCH', 'WORM', 'YARD'
 ];
+
+// Hebrew word bank - מילים בעברית
+const WORD_BANK_HE = [
+  'שמש', 'ירח', 'כוכב', 'ים', 'הר', 'עץ', 'פרח', 'ציפור', 'דג', 'חתול',
+  'כלב', 'אריה', 'נחש', 'פיל', 'סוס', 'דוב', 'זאב', 'נשר', 'יונה', 'עכביש',
+  'לב', 'עין', 'יד', 'רגל', 'ראש', 'אוזן', 'אף', 'פה', 'שיער', 'אצבע',
+  'בית', 'דלת', 'חלון', 'גג', 'קיר', 'רצפה', 'מדרגות', 'גן', 'גדר', 'שער',
+  'מכונית', 'אוטובוס', 'רכבת', 'מטוס', 'אונייה', 'אופניים', 'מסוק', 'טיל', 'סירה', 'משאית',
+  'ספר', 'עט', 'מחברת', 'שולחן', 'כיסא', 'מנורה', 'שעון', 'טלפון', 'מחשב', 'מסך',
+  'תפוח', 'בננה', 'תפוז', 'ענב', 'לימון', 'עגבנייה', 'מלפפון', 'גזר', 'בצל', 'תפוד',
+  'לחם', 'חלב', 'ביצה', 'גבינה', 'בשר', 'דג', 'אורז', 'פסטה', 'מרק', 'עוגה',
+  'מלך', 'מלכה', 'נסיך', 'נסיכה', 'אביר', 'קסם', 'דרקון', 'מכשפה', 'שד', 'גמד',
+  'חרב', 'מגן', 'חץ', 'קשת', 'תותח', 'פצצה', 'טנק', 'רובה', 'אקדח', 'סכין',
+  'רופא', 'אחות', 'מורה', 'שוטר', 'חייל', 'טייס', 'נהג', 'טבח', 'צייר', 'זמר',
+  'כדורגל', 'כדורסל', 'טניס', 'שחייה', 'ריצה', 'קפיצה', 'משחק', 'כדור', 'מגרש', 'גביע',
+  'זהב', 'כסף', 'יהלום', 'אבן', 'ברזל', 'נחושת', 'זכוכית', 'עץ', 'פלסטיק', 'נייר',
+  'אש', 'מים', 'רוח', 'אדמה', 'שלג', 'גשם', 'ברק', 'ענן', 'קשת', 'סערה',
+  'לילה', 'יום', 'בוקר', 'ערב', 'שבוע', 'חודש', 'שנה', 'קיץ', 'חורף', 'אביב',
+  'אהבה', 'שלום', 'מלחמה', 'חיים', 'מוות', 'חלום', 'זיכרון', 'סוד', 'אמת', 'שקר',
+  'מוזיקה', 'שיר', 'ריקוד', 'תמונה', 'פסל', 'תיאטרון', 'קולנוע', 'ספרייה', 'מוזיאון', 'גלריה',
+  'ירושלים', 'תאביב', 'חיפה', 'אילת', 'מדבר', 'כנרת', 'נגב', 'גליל', 'כרמל', 'מצדה',
+  'פירמידה', 'מגדל', 'גשר', 'מנהרה', 'טירה', 'ארמון', 'מקדש', 'כנסייה', 'מסגד', 'בית',
+  'חלל', 'כוכב', 'גלקסיה', 'לוויין', 'רקטה', 'אסטרונאוט', 'חייזר', 'מאדים', 'צדק', 'שבתאי'
+];
+
+// Get word bank by language
+function getWordBank(language: Language = 'en'): string[] {
+  return language === 'he' ? WORD_BANK_HE : WORD_BANK_EN;
+}
 
 // Shuffle array using Fisher-Yates
 function shuffle<T>(array: T[]): T[] {
@@ -60,9 +92,10 @@ function shuffle<T>(array: T[]): T[] {
 }
 
 // Generate a new game board
-export function generateBoard(startingTeam: Team = 'teamA'): BoardState {
-  // Pick 25 random words
-  const shuffledWords = shuffle(WORD_BANK).slice(0, 25);
+export function generateBoard(startingTeam: Team = 'teamA', language: Language = 'en'): BoardState {
+  // Pick 25 random words from the appropriate word bank
+  const wordBank = getWordBank(language);
+  const shuffledWords = shuffle(wordBank).slice(0, 25);
   
   // Assign categories: 9 for starting team, 8 for other, 7 neutral, 1 assassin
   const categories: CardCategory[] = [

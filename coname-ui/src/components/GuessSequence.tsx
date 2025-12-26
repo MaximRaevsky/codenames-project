@@ -27,6 +27,7 @@ export interface GuessSequenceProps {
   isWaitingForGuess: boolean;
   onEndTurn?: () => void;
   canEndTurn: boolean;
+  isCluePhase?: boolean; // true if AI is generating clue, false if guessing
 }
 
 interface ResultMessageConfig {
@@ -144,6 +145,7 @@ export const GuessSequence: FC<GuessSequenceProps> = ({
   isWaitingForGuess,
   onEndTurn,
   canEndTurn,
+  isCluePhase = false,
 }) => {
   const { settings } = useAppState();
 
@@ -151,6 +153,7 @@ export const GuessSequence: FC<GuessSequenceProps> = ({
   const colorClasses = getColorClasses(teamColor);
   const lastGuess = currentGuesses[currentGuesses.length - 1];
   const lastWasWrong = lastGuess && !lastGuess.correct;
+  const lastWasAssassin = lastGuess && lastGuess.category === 'assassin';
 
   const getResultMessage = (result: GuessResult): ResultMessageConfig => {
     const isUserTeamWord = userIsRed
@@ -234,10 +237,14 @@ export const GuessSequence: FC<GuessSequenceProps> = ({
           </div>
           <div>
             <h3 className={`font-display font-bold text-lg ${colorClasses.text}`}>
-              {teamName} - Guessing
+              {teamName} - {isCluePhase ? 'Thinking' : 'Guessing'}
             </h3>
             <p className="text-sm text-gray-500">
-              {isUserTurn ? 'Click on the board to guess' : 'AI is guessing...'}
+              {isUserTurn 
+                ? 'Click on the board to guess' 
+                : isCluePhase 
+                  ? 'AI is thinking of a clue...' 
+                  : 'AI is guessing...'}
             </p>
           </div>
         </div>
@@ -328,8 +335,8 @@ export const GuessSequence: FC<GuessSequenceProps> = ({
         </motion.div>
       )}
 
-      {/* Turn Ending Message */}
-      {lastWasWrong && (
+      {/* Turn Ending Message - don't show if assassin (game over) */}
+      {lastWasWrong && !lastWasAssassin && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, AlertCircle, Infinity, Loader2, CheckCircle } from 'lucide-react';
-import { validateClue } from '../utils/validator';
+import { validateClueAsync } from '../utils/validator';
 import { WordCard } from '../types/game';
 
 interface ClueInputProps {
@@ -28,30 +28,38 @@ export function ClueInput({ boardWords, maxNumber, onSubmit }: ClueInputProps) {
     setError(null);
     setValidationSuccess(false);
 
-    // Simulate validation delay for UX
-    await new Promise(resolve => setTimeout(resolve, 1200));
-    
-    // Validate clue
-    const clueValidation = validateClue(clue, boardWords);
-    
-    if (!clueValidation.valid) {
-      setError(clueValidation.reason || 'Invalid clue');
+    try {
+      // Validate clue using AI-powered validation
+      const clueValidation = await validateClueAsync(clue, boardWords);
+      
+      if (!clueValidation.valid) {
+        setError(clueValidation.reason || 'Invalid clue');
+        setIsValidating(false);
+        return;
+      }
+
+      // Show warning if there is one
+      if (clueValidation.reason) {
+        console.log('Clue validation warning:', clueValidation.reason);
+      }
+
+      // Show success briefly
       setIsValidating(false);
-      return;
+      setValidationSuccess(true);
+      
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      // Submit
+      onSubmit(clue.trim().toUpperCase(), isInfinity ? -1 : number);
+      setClue('');
+      setNumber(1);
+      setIsInfinity(false);
+      setValidationSuccess(false);
+    } catch (error) {
+      console.error('Validation error:', error);
+      setError('Validation failed. Please try again.');
+      setIsValidating(false);
     }
-
-    // Show success briefly
-    setIsValidating(false);
-    setValidationSuccess(true);
-    
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    // Submit
-    onSubmit(clue.trim().toUpperCase(), isInfinity ? -1 : number);
-    setClue('');
-    setNumber(1);
-    setIsInfinity(false);
-    setValidationSuccess(false);
   };
 
   const handleClueChange = (value: string) => {

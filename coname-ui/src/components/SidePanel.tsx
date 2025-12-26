@@ -1,6 +1,6 @@
 import { FC } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Target, History, RotateCcw, Plus } from 'lucide-react';
+import { Users, Target, History, Plus } from 'lucide-react';
 
 import { TurnEvent, Team } from '../types/game';
 import { useAppState } from '../hooks/useGameState';
@@ -15,7 +15,6 @@ export interface SidePanelProps {
   teamBRemaining: number;
   turnHistory: TurnEvent[];
   onNewGame: () => void;
-  onReset: () => void;
 }
 
 interface TeamDisplayConfig {
@@ -221,27 +220,19 @@ const TurnHistorySection: FC<TurnHistorySectionProps> = ({ events, userIsRed }) 
 interface ActionsSectionProps {
   userIsRed: boolean;
   onNewGame: () => void;
-  onReset: () => void;
 }
 
-const ActionsSection: FC<ActionsSectionProps> = ({ userIsRed, onNewGame, onReset }) => {
+const ActionsSection: FC<ActionsSectionProps> = ({ userIsRed, onNewGame }) => {
   const config = getTeamConfig(userIsRed);
 
   return (
-    <div className="space-y-2">
+    <div>
       <button
         onClick={onNewGame}
         className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 text-white font-display font-semibold rounded-xl transition-all shadow-md ${config.gradientClass}`}
       >
         <Plus className="w-4 h-4" />
         New Game
-      </button>
-      <button
-        onClick={onReset}
-        className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-display text-sm rounded-xl transition-colors"
-      >
-        <RotateCcw className="w-4 h-4" />
-        Reset
       </button>
     </div>
   );
@@ -257,7 +248,6 @@ export const SidePanel: FC<SidePanelProps> = ({
   teamBRemaining,
   turnHistory,
   onNewGame,
-  onReset,
 }) => {
   const { settings } = useAppState();
 
@@ -282,7 +272,6 @@ export const SidePanel: FC<SidePanelProps> = ({
       <ActionsSection
         userIsRed={userIsRed}
         onNewGame={onNewGame}
-        onReset={onReset}
       />
     </div>
   );
