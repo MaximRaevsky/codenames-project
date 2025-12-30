@@ -1,6 +1,6 @@
 import { useState, FC } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Eye, Target } from 'lucide-react';
+import { X, Eye, Target, MessageSquare } from 'lucide-react';
 import { SurveyResponse, PlayerRole } from '../types/game';
 
 // ============================================
@@ -44,6 +44,36 @@ const SliderQuestion: FC<SliderQuestionProps> = ({ label, value, min, max, onCha
     <div className="flex justify-between text-xs text-gray-400 mt-1">
       <span>{min}</span>
       <span>{max}</span>
+    </div>
+  </div>
+);
+
+// ============================================
+// TEXT FEEDBACK COMPONENT
+// ============================================
+
+interface TextFeedbackProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const TextFeedback: FC<TextFeedbackProps> = ({ value, onChange }) => (
+  <div className="pt-4 border-t border-gray-100">
+    <div className="flex items-center gap-2 mb-2">
+      <MessageSquare className="w-4 h-4 text-gray-500" />
+      <label className="text-sm text-gray-700 font-medium">
+        Any additional feedback? (optional)
+      </label>
+    </div>
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="Tell us about your experience with the AI... What worked well? What could be improved?"
+      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-gray-700 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none h-20"
+      maxLength={500}
+    />
+    <div className="text-xs text-gray-400 text-right mt-1">
+      {value.length}/500
     </div>
   </div>
 );
@@ -135,6 +165,9 @@ export const MicroSurvey: FC<MicroSurveyProps> = ({
     overallTrust: 4,
   });
 
+  // Text feedback - shared between both roles
+  const [textFeedback, setTextFeedback] = useState('');
+
   const handleSpymasterChange = (key: string, value: number) => {
     setSpymasterValues(prev => ({ ...prev, [key]: value }));
   };
@@ -152,6 +185,7 @@ export const MicroSurvey: FC<MicroSurveyProps> = ({
         clueClarity: spymasterValues.aiGuessAccuracy, // Using accuracy as clarity metric
         trustInAI: spymasterValues.overallTrust,
         aiGuessAccuracy: spymasterValues.aiGuessAccuracy,
+        userFeedback: textFeedback.trim() || undefined,
       });
     } else {
       onSubmit({
@@ -160,8 +194,11 @@ export const MicroSurvey: FC<MicroSurveyProps> = ({
         playerRole: 'guesser',
         clueClarity: guesserValues.clueClarity,
         trustInAI: guesserValues.overallTrust,
+        userFeedback: textFeedback.trim() || undefined,
       });
     }
+    // Reset text feedback after submit
+    setTextFeedback('');
   };
 
   const isSpymaster = playerRole === 'spymaster';
@@ -223,6 +260,12 @@ export const MicroSurvey: FC<MicroSurveyProps> = ({
                 onChange={handleGuesserChange} 
               />
             )}
+
+            {/* Text feedback */}
+            <TextFeedback 
+              value={textFeedback} 
+              onChange={setTextFeedback} 
+            />
 
             {/* Action buttons */}
             <div className="flex gap-3 mt-6">

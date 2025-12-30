@@ -16,6 +16,8 @@ import {
   createTurnEvent,
 } from '../utils/gameLogic';
 import { aiSpymaster, aiGuesser, rivalTurn } from '../utils/ai-agents';
+import { saveUser, extractGameSessionData } from '../utils/userDatabase';
+import { updateSummaryAfterGame, updateSummaryOnProfileChange } from '../utils/summaryAgent';
 
 // Default profile - enhanced for AI context
 const DEFAULT_PROFILE: UserProfile = {
@@ -108,7 +110,18 @@ export const useAppState = create<AppState>()(
 
       // User profile
       profile: DEFAULT_PROFILE,
-      setProfile: (profile) => set({ profile }),
+      setProfile: (profile) => {
+        // Save to database
+        saveUser(profile);
+        set({ profile });
+        
+        // If user has played games before, update their summary based on profile changes
+        if (profile.email) {
+          updateSummaryOnProfileChange(profile.email).catch(err => {
+            console.error('Error updating summary on profile change:', err);
+          });
+        }
+      },
       hasCompletedProfile: false,
       setHasCompletedProfile: (completed) => set({ hasCompletedProfile: completed }),
 
@@ -122,11 +135,22 @@ export const useAppState = create<AppState>()(
 
       // Survey - only at end of game
       surveyResponses: [],
-      addSurveyResponse: (response) =>
+      addSurveyResponse: (response) => {
+        const { game, profile } = get();
+        
         set((state) => ({
           surveyResponses: [...state.surveyResponses, response],
           showSurvey: false,
-        })),
+        }));
+        
+        // After survey is submitted, update the user's LLM summary
+        if (game && profile.email && game.status === 'gameOver') {
+          const sessionData = extractGameSessionData(game, response.userFeedback, response);
+          updateSummaryAfterGame(profile.email, sessionData).catch(err => {
+            console.error('Error updating summary after game:', err);
+          });
+        }
+      },
       showSurvey: false,
       setShowSurvey: (show) => set({ showSurvey: show }),
 

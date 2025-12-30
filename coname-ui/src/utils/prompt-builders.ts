@@ -10,6 +10,7 @@
  */
 
 import { BoardState, UserProfile, TurnEvent, Team, CardCategory } from '../types/game';
+import { getSummaryForAI } from './summaryAgent';
 
 // ============================================
 // SPYMASTER PROMPTS
@@ -517,6 +518,13 @@ function buildProfileContext(profile: UserProfile): string {
   }
   if (profile.additionalNotes) {
     parts.push(`- Additional context: ${profile.additionalNotes}`);
+  }
+
+  // Add LLM-generated summary if available
+  const aiSummary = profile.email ? getSummaryForAI(profile.email) : '';
+  if (aiSummary) {
+    parts.push('');
+    parts.push(aiSummary);
   }
 
   return parts.length > 0 ? parts.join('\n') : 'No profile information available.';

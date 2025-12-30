@@ -68,6 +68,9 @@ export interface SurveyResponse {
   // Guesser-specific (when user is guesser, rating AI spymaster)
   clueRelevance?: number;
   aiPlayStyle?: number;
+  
+  // Text feedback - user's written comments about the game/AI
+  userFeedback?: string;
 }
 
 // ============================================

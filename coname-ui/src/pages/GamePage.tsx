@@ -13,11 +13,14 @@ import { RulesTooltip } from '../components/RulesTooltip';
 import { Logo } from '../components/Logo';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { useLanguage } from '../i18n';
+import { extractGameSessionData } from '../utils/userDatabase';
+import { updateSummaryAfterGame } from '../utils/summaryAgent';
 
 export function GamePage() {
   const {
     game,
     settings,
+    profile,
     setCurrentPage,
     startNewGame,
     submitClue,
@@ -115,9 +118,21 @@ export function GamePage() {
   };
   
   // Handle survey close/submit - then navigate or just dismiss
-  const handleSurveyClose = () => {
+  // wasSubmitted flag prevents duplicate summary updates
+  const handleSurveyClose = (wasSubmitted = false) => {
     setShowSurvey(false);
     setSurveyPending(false);
+    
+    // If user SKIPPED the survey (closed without submitting), still update summary
+    // This captures the game data even without explicit feedback
+    // Note: When submitted, addSurveyResponse in hooks handles the update with feedback
+    if (!wasSubmitted && game && profile.email && game.status === 'gameOver') {
+      const sessionData = extractGameSessionData(game);
+      updateSummaryAfterGame(profile.email, sessionData).catch(err => {
+        console.error('Error updating summary after skipping survey:', err);
+      });
+    }
+    
     if (pendingNavigation === 'home') {
       setCurrentPage('welcome');
     } else if (pendingNavigation === 'newGame') {
@@ -131,7 +146,7 @@ export function GamePage() {
   
   const handleSurveySubmit = (response: any) => {
     addSurveyResponse(response);
-    handleSurveyClose();
+    handleSurveyClose(true); // Mark as submitted to prevent duplicate summary update
   };
   
   // Handle going home mid-game - cancel all AI processes
@@ -541,7 +556,7 @@ export function GamePage() {
           turnId={game.turnHistory[game.turnHistory.length - 1]?.id || ''}
           isOpen={showSurvey}
           playerRole={settings.playerRole}
-          onClose={handleSurveyClose}
+          onClose={() => handleSurveyClose(false)}
           onSubmit={handleSurveySubmit}
         />
       )}
