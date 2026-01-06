@@ -230,7 +230,10 @@ export function createTurnEvent(
   guesses: string[],
   guessResults: { word: string; correct: boolean; category: CardCategory }[],
   teamARemaining: number,
-  teamBRemaining: number
+  teamBRemaining: number,
+  intendedTargets?: string[],
+  spymasterReasoning?: string,
+  guesserReasoning?: string
 ): TurnEvent {
   return {
     id: generateId(),
@@ -243,6 +246,9 @@ export function createTurnEvent(
     guessResults,
     teamARemaining,
     teamBRemaining,
+    intendedTargets,
+    spymasterReasoning,
+    guesserReasoning,
   };
 }
 

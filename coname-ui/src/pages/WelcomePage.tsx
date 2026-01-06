@@ -1,6 +1,6 @@
 import { FC } from 'react';
 import { motion } from 'framer-motion';
-import { Play, RotateCcw, ArrowRight, Bot, Users, Settings, Clock, Mail, AlertCircle } from 'lucide-react';
+import { Play, RotateCcw, ArrowRight, Bot, Users, Settings, Clock, Mail, AlertCircle, BarChart3, LogOut, User } from 'lucide-react';
 
 import { useAppState } from '../hooks/useGameState';
 import { Logo } from '../components/Logo';
@@ -61,6 +61,7 @@ export const WelcomePage: FC = () => {
     hasExistingGame,
     setCurrentPage,
     hasCompletedProfile,
+    logout,
   } = useAppState();
   
   const { t, isRTL } = useLanguage();
@@ -364,15 +365,47 @@ export const WelcomePage: FC = () => {
             </button>
           )}
 
-          {/* Edit Profile - visible when profile exists */}
+          {/* Logged in user info & actions - visible when profile exists */}
           {hasCompletedProfile && hasValidEmail && (
-            <button
-              onClick={() => setCurrentPage('profile')}
-              className="w-full flex items-center justify-center gap-2 py-3 px-6 bg-gray-100 hover:bg-gray-200 text-gray-600 font-display rounded-xl transition-colors"
-            >
-              <Settings className="w-5 h-5" />
-              {t('editProfile')}
-            </button>
+            <div className="space-y-3">
+              {/* User info bar */}
+              <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <User className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-green-600 font-medium">Logged in as</p>
+                    <p className="text-sm text-green-800 font-semibold">{profile.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={logout}
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  {isRTL ? 'התנתק' : 'Logout'}
+                </button>
+              </div>
+              
+              {/* Edit Profile & Metrics buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setCurrentPage('profile')}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 px-6 bg-gray-100 hover:bg-gray-200 text-gray-600 font-display rounded-xl transition-colors"
+                >
+                  <Settings className="w-5 h-5" />
+                  {t('editProfile')}
+                </button>
+                <button
+                  onClick={() => setCurrentPage('metrics')}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 px-6 bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 text-purple-700 font-display rounded-xl transition-colors border border-purple-200"
+                >
+                  <BarChart3 className="w-5 h-5" />
+                  {isRTL ? 'מדדים' : 'Metrics'}
+                </button>
+              </div>
+            </div>
           )}
         </motion.div>
 

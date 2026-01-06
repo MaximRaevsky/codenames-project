@@ -1,10 +1,11 @@
 import { FC, useState } from 'react';
-import { motion } from 'framer-motion';
-import { User, ChevronRight, ChevronLeft, Check, Edit3, Users as UsersIcon, Brain, Lightbulb } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { User, ChevronRight, ChevronLeft, Check, Edit3, Users as UsersIcon, Brain, Lightbulb, Bot, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 
 import { useAppState } from '../hooks/useGameState';
 import { UserProfile } from '../types/game';
 import { Logo } from '../components/Logo';
+import { getUser, SummaryHistoryEntry } from '../utils/userDatabase';
 
 // ============================================
 // CONSTANTS
@@ -47,6 +48,149 @@ const SectionHeader: FC<SectionHeaderProps> = ({ icon, title, subtitle }) => (
   </div>
 );
 
+// AI Summary Section Component
+interface AISummarySectionProps {
+  email: string;
+}
+
+// Helper to safely convert summary to string (handles objects returned by AI)
+const formatSummaryText = (summary: unknown): string => {
+  if (!summary) return '';
+  if (typeof summary === 'string') return summary;
+  if (typeof summary === 'object') {
+    // AI sometimes returns structured objects like {Works, Fails, Domains, Pattern, Feedback}
+    try {
+      const obj = summary as Record<string, unknown>;
+      return Object.entries(obj)
+        .map(([key, value]) => `• ${key}: ${value}`)
+        .join('\n');
+    } catch {
+      return JSON.stringify(summary, null, 2);
+    }
+  }
+  return String(summary);
+};
+
+const AISummarySection: FC<AISummarySectionProps> = ({ email }) => {
+  const [showHistory, setShowHistory] = useState(false);
+  const user = getUser(email);
+  
+  if (!user) return null;
+  
+  const currentSummary = formatSummaryText(user.llmSummary);
+  const summaryHistory = user.summaryHistory || [];
+  
+  // If no summary yet, show placeholder
+  if (!currentSummary) {
+    return (
+      <div className="pt-4 border-t border-gray-100">
+        <SectionHeader 
+          icon={<Bot className="w-5 h-5 text-gray-600" />}
+          title="AI Learning Summary"
+          subtitle="What the AI has learned about you"
+        />
+        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 text-center">
+          <p className="text-gray-500 text-sm">
+            No summary yet. After you play your first game, the AI will analyze your 
+            gameplay patterns and create a personalized summary to improve future games.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const getTriggerLabel = (trigger: string) => {
+    switch (trigger) {
+      case 'initial': return '🆕 Initial';
+      case 'game': return '🎮 After Game';
+      case 'profile_change': return '📝 Profile Update';
+      default: return trigger;
+    }
+  };
+
+  return (
+    <div className="pt-4 border-t border-gray-100">
+      <SectionHeader 
+        icon={<Bot className="w-5 h-5 text-purple-600" />}
+        title="AI Learning Summary"
+        subtitle="What the AI has learned about you"
+      />
+      
+      {/* Current Summary */}
+      <div className="p-4 bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl border border-purple-200 mb-3">
+        <p className="text-sm text-gray-700 whitespace-pre-wrap">{currentSummary}</p>
+      </div>
+      
+      {/* Summary History Toggle */}
+      {summaryHistory.length > 0 && (
+        <>
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="flex items-center gap-2 text-sm text-purple-600 hover:text-purple-700 font-medium mb-2"
+          >
+            {showHistory ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {showHistory ? 'Hide' : 'Show'} Update History ({summaryHistory.length} update{summaryHistory.length > 1 ? 's' : ''})
+          </button>
+          
+          <AnimatePresence>
+            {showHistory && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="space-y-3 max-h-80 overflow-y-auto"
+              >
+                {[...summaryHistory].reverse().map((entry, index) => (
+                  <div 
+                    key={entry.timestamp}
+                    className={`p-3 rounded-lg border ${index === 0 ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'}`}
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-white border">
+                        {getTriggerLabel(entry.trigger)}
+                      </span>
+                      <span className="text-xs text-gray-400 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {formatDate(entry.timestamp)}
+                      </span>
+                    </div>
+                    
+                    {/* Reason for update */}
+                    <div className="mb-2 p-2 bg-white rounded border border-gray-100">
+                      <p className="text-xs text-gray-500 font-medium">Why this update:</p>
+                      <p className="text-sm text-gray-700">{entry.reason}</p>
+                    </div>
+                    
+                    {/* Summary content */}
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
+                        View full summary
+                      </summary>
+                      <p className="mt-2 text-gray-600 whitespace-pre-wrap p-2 bg-white rounded">
+                        {formatSummaryText(entry.summary)}
+                      </p>
+                    </details>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>
+      )}
+    </div>
+  );
+};
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -59,6 +203,7 @@ const ensureProfileDefaults = (profile: Partial<UserProfile>): UserProfile => ({
   problemSolvingApproach: profile.problemSolvingApproach || '',
   interests: profile.interests || [],
   additionalNotes: profile.additionalNotes || '',
+  llmSummary: profile.llmSummary || '',
 });
 
 // Email validation helper
@@ -94,6 +239,21 @@ export const ProfilePage: FC = () => {
       setEmailError('Email is required');
     } else {
       setEmailError('');
+      
+      // Check if user exists in database and load their data
+      const existingUser = getUser(email);
+      if (existingUser) {
+        console.log('📂 [PROFILE] Found existing user, loading data:', email);
+        setFormData({
+          email: existingUser.email,
+          age: existingUser.age || '',
+          occupation: existingUser.occupation || '',
+          problemSolvingApproach: existingUser.problemSolvingApproach || '',
+          interests: existingUser.interests || [],
+          additionalNotes: existingUser.additionalNotes || '',
+          llmSummary: existingUser.llmSummary || '',
+        });
+      }
     }
   };
 
@@ -333,6 +493,9 @@ export const ProfilePage: FC = () => {
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none h-24"
             />
           </div>
+
+          {/* AI Summary Section - Only show if user has been saved */}
+          {profile.email && <AISummarySection email={profile.email} />}
         </div>
 
         {/* Action Buttons */}

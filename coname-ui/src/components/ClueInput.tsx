@@ -1,27 +1,43 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, AlertCircle, Infinity, Loader2, CheckCircle } from 'lucide-react';
+import { Send, AlertCircle, Infinity, Loader2, CheckCircle, Target } from 'lucide-react';
 import { validateClueAsync } from '../utils/validator';
 import { WordCard } from '../types/game';
 
 interface ClueInputProps {
   boardWords: WordCard[];
+  teamWords: string[]; // Words that belong to user's team (unrevealed)
   maxNumber: number;
-  onSubmit: (clue: string, number: number) => void;
+  onSubmit: (clue: string, number: number, intendedTargets: string[]) => void;
 }
 
-export function ClueInput({ boardWords, maxNumber, onSubmit }: ClueInputProps) {
+export function ClueInput({ boardWords, teamWords, maxNumber, onSubmit }: ClueInputProps) {
   const [clue, setClue] = useState('');
   const [number, setNumber] = useState(1);
   const [isInfinity, setIsInfinity] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [validationSuccess, setValidationSuccess] = useState(false);
+  const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
+
+  const toggleTarget = (word: string) => {
+    setSelectedTargets(prev => 
+      prev.includes(word) 
+        ? prev.filter(w => w !== word)
+        : [...prev, word]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!clue.trim()) return;
+    
+    // Require at least one target word
+    if (selectedTargets.length === 0) {
+      setError('Please select at least one word you\'re trying to connect');
+      return;
+    }
 
     // Start validation
     setIsValidating(true);
@@ -49,12 +65,13 @@ export function ClueInput({ boardWords, maxNumber, onSubmit }: ClueInputProps) {
       
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      // Submit
-      onSubmit(clue.trim().toUpperCase(), isInfinity ? -1 : number);
+      // Submit with selected targets
+      onSubmit(clue.trim().toUpperCase(), isInfinity ? -1 : number, selectedTargets);
       setClue('');
       setNumber(1);
       setIsInfinity(false);
       setValidationSuccess(false);
+      setSelectedTargets([]);
     } catch (error) {
       console.error('Validation error:', error);
       setError('Validation failed. Please try again.');
@@ -66,6 +83,7 @@ export function ClueInput({ boardWords, maxNumber, onSubmit }: ClueInputProps) {
     setClue(value);
     setError(null);
     setValidationSuccess(false);
+    // Don't clear selected targets - user might want to keep them
   };
 
   // Generate number options from 0 to maxNumber
@@ -139,6 +157,36 @@ export function ClueInput({ boardWords, maxNumber, onSubmit }: ClueInputProps) {
             Unlimited guesses - your teammate can keep guessing until they miss!
           </p>
         )}
+
+        {/* Target Word Selection */}
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm text-gray-600 font-medium">
+            <Target className="w-4 h-4" />
+            Which words are you targeting? (click to select)
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {teamWords.map(word => (
+              <button
+                key={word}
+                type="button"
+                onClick={() => toggleTarget(word)}
+                disabled={isValidating}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  selectedTargets.includes(word)
+                    ? 'bg-red-500 text-white shadow-md scale-105'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {word}
+              </button>
+            ))}
+          </div>
+          {selectedTargets.length > 0 && (
+            <p className="text-xs text-gray-500">
+              Selected {selectedTargets.length} word{selectedTargets.length > 1 ? 's' : ''}: {selectedTargets.join(', ')}
+            </p>
+          )}
+        </div>
 
         {/* Validation States */}
         <AnimatePresence mode="wait">

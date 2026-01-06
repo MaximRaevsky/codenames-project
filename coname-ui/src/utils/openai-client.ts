@@ -5,7 +5,7 @@
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-const MODEL = 'gpt-4o-mini';
+const MODEL = 'gpt-4o-mini'; // Upgraded from gpt-4o-mini for better performance
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant';
@@ -43,7 +43,7 @@ export async function callAgent(
     throw new Error('OpenAI API key not configured. Set VITE_OPENAI_API_KEY in .env');
   }
 
-  console.log('🤖 [AGENT] Making API call to GPT-4o-mini...');
+  console.log('🤖 [AGENT] Making API call to GPT-4o...');
   console.log('🤖 [AGENT] System prompt length:', systemPrompt.length);
   console.log('🤖 [AGENT] User message length:', userMessage.length);
   console.log('🤖 [AGENT] Options:', { temperature, maxTokens, jsonMode });

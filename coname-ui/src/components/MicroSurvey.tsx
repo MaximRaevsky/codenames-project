@@ -1,7 +1,8 @@
 import { useState, FC } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Eye, Target, MessageSquare } from 'lucide-react';
-import { SurveyResponse, PlayerRole } from '../types/game';
+import { X, Eye, Target, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
+import { SurveyResponse, PlayerRole, TurnEvent, Team } from '../types/game';
+import { GameSummary } from './GameSummary';
 
 // ============================================
 // TYPES
@@ -11,6 +12,8 @@ interface MicroSurveyProps {
   turnId: string;
   isOpen: boolean;
   playerRole: PlayerRole;
+  turnHistory?: TurnEvent[];
+  userTeam?: Team;
   onClose: () => void;
   onSubmit: (response: SurveyResponse) => void;
 }
@@ -150,6 +153,8 @@ export const MicroSurvey: FC<MicroSurveyProps> = ({
   turnId, 
   isOpen, 
   playerRole,
+  turnHistory,
+  userTeam,
   onClose, 
   onSubmit 
 }) => {
@@ -167,6 +172,9 @@ export const MicroSurvey: FC<MicroSurveyProps> = ({
 
   // Text feedback - shared between both roles
   const [textFeedback, setTextFeedback] = useState('');
+  
+  // Toggle for showing/hiding game summary
+  const [showSummary, setShowSummary] = useState(true);
 
   const handleSpymasterChange = (key: string, value: number) => {
     setSpymasterValues(prev => ({ ...prev, [key]: value }));
@@ -177,26 +185,18 @@ export const MicroSurvey: FC<MicroSurveyProps> = ({
   };
 
   const handleSubmit = () => {
-    if (playerRole === 'spymaster') {
-      onSubmit({
-        turnId,
-        timestamp: Date.now(),
-        playerRole: 'spymaster',
-        clueClarity: spymasterValues.aiGuessAccuracy, // Using accuracy as clarity metric
-        trustInAI: spymasterValues.overallTrust,
-        aiGuessAccuracy: spymasterValues.aiGuessAccuracy,
-        userFeedback: textFeedback.trim() || undefined,
-      });
-    } else {
-      onSubmit({
-        turnId,
-        timestamp: Date.now(),
-        playerRole: 'guesser',
-        clueClarity: guesserValues.clueClarity,
-        trustInAI: guesserValues.overallTrust,
-        userFeedback: textFeedback.trim() || undefined,
-      });
-    }
+    const isSpymaster = playerRole === 'spymaster';
+    
+    onSubmit({
+      turnId,
+      timestamp: Date.now(),
+      playerRole,
+      clueClarity: isSpymaster ? spymasterValues.aiGuessAccuracy : guesserValues.clueClarity,
+      trustInAI: isSpymaster ? spymasterValues.overallTrust : guesserValues.overallTrust,
+      aiGuessAccuracy: isSpymaster ? spymasterValues.aiGuessAccuracy : undefined,
+      userFeedback: textFeedback.trim() || undefined,
+    });
+    
     // Reset text feedback after submit
     setTextFeedback('');
   };
@@ -207,6 +207,8 @@ export const MicroSurvey: FC<MicroSurveyProps> = ({
     ? 'Help us improve how the AI guesses based on your clues.'
     : 'Help us improve the clues the AI gives you.';
 
+  const hasSummary = turnHistory && turnHistory.length > 0 && userTeam;
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -214,13 +216,13 @@ export const MicroSurvey: FC<MicroSurveyProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 overflow-y-auto"
         >
           <motion.div
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="bg-white rounded-2xl p-6 max-w-md w-full border border-gray-200 shadow-2xl"
+            className={`bg-white rounded-2xl p-6 w-full border border-gray-200 shadow-2xl my-4 ${hasSummary ? 'max-w-3xl' : 'max-w-md'}`}
           >
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
@@ -247,6 +249,29 @@ export const MicroSurvey: FC<MicroSurveyProps> = ({
             <p className="text-gray-500 text-sm mb-6">
               {subtitle}
             </p>
+
+            {/* Game Summary Section */}
+            {hasSummary && (
+              <div className="mb-6">
+                <button
+                  onClick={() => setShowSummary(!showSummary)}
+                  className="flex items-center gap-2 text-sm font-medium text-purple-600 hover:text-purple-700 mb-2"
+                >
+                  {showSummary ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  {showSummary ? 'Hide' : 'Show'} Game Summary
+                </button>
+                
+                {showSummary && (
+                  <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-xl">
+                    <GameSummary 
+                      turnHistory={turnHistory} 
+                      userRole={playerRole} 
+                      userTeam={userTeam} 
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Role-specific survey */}
             {isSpymaster ? (

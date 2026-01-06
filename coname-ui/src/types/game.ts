@@ -41,6 +41,13 @@ export interface TurnEvent {
   guessResults: { word: string; correct: boolean; category: CardCategory }[];
   teamARemaining: number;
   teamBRemaining: number;
+  
+  // Spymaster's intended targets and reasoning (for both AI and user)
+  intendedTargets?: string[];
+  spymasterReasoning?: string;
+  
+  // Guesser's reasoning for their guesses (AI guesser only)
+  guesserReasoning?: string;
 }
 
 export interface GuessResult {
@@ -94,6 +101,10 @@ export interface UserProfile {
   
   // Additional context - optional
   additionalNotes?: string;
+  
+  // LLM-generated summary - updated after each game
+  // Contains learned patterns about what works/doesn't work with this user
+  llmSummary?: string;
 }
 
 // ============================================
@@ -138,7 +149,12 @@ export interface GameState {
   settings: GameSettings;
   turnHistory: TurnEvent[];
   surveyResponses: SurveyResponse[];
-  currentClue?: { word: string; number: number };
+  currentClue?: { 
+    word: string; 
+    number: number; 
+    intendedTargets?: string[];  // Words the spymaster intended to connect
+    reasoning?: string;          // AI spymaster's reasoning
+  };
   
   // Iterative guessing state
   guessesRemaining: number;
@@ -155,6 +171,9 @@ export interface GameState {
   
   // Turn control
   turnShouldEnd: boolean;
+  
+  // AI reasoning (stored temporarily during turn, saved to turn history at end)
+  aiGuesserReasoning?: string;
   
   // Game metadata
   startingTeam?: Team;
@@ -179,8 +198,7 @@ export interface SpymasterResponse {
   clue: string;
   number: number;
   reasoning?: string;
-  // TODO: Add confidence score from AI
-  // TODO: Add alternative clues considered
+  targetWords?: string[];  // Words the AI intended to connect
 }
 
 export interface GuesserResponse {

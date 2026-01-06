@@ -16,8 +16,8 @@ import {
   createTurnEvent,
 } from '../utils/gameLogic';
 import { aiSpymaster, aiGuesser, rivalTurn } from '../utils/ai-agents';
-import { saveUser, extractGameSessionData } from '../utils/userDatabase';
-import { updateSummaryAfterGame, updateSummaryOnProfileChange } from '../utils/summaryAgent';
+import { saveUser, extractGameSessionData, getUser } from '../utils/userDatabase';
+import { updateSummaryAfterGame, updateSummaryOnProfileChange, generateInitialSummary } from '../utils/summaryAgent';
 
 // Default profile - enhanced for AI context
 const DEFAULT_PROFILE: UserProfile = {
@@ -43,7 +43,7 @@ const getPhaseTimeLimit = (timerMinutes: number): number => {
 };
 
 // App page/view
-export type AppPage = 'welcome' | 'profile' | 'game';
+export type AppPage = 'welcome' | 'profile' | 'game' | 'metrics';
 
 interface AppState {
   // Navigation
@@ -73,7 +73,7 @@ interface AppState {
   hasExistingGame: () => boolean;
 
   // Spymaster actions (user is spymaster)
-  submitClue: (clue: string, number: number) => Promise<void>;
+  submitClue: (clue: string, number: number, intendedTargets?: string[]) => Promise<void>;
 
   // Guesser actions (user is guesser)
   requestAIClue: () => Promise<void>;
@@ -81,6 +81,7 @@ interface AppState {
   // Iterative guessing - single word at a time
   makeGuess: (word: string) => { result: 'correct' | 'wrong' | 'neutral' | 'assassin'; category: CardCategory; continueGuessing: boolean };
   endGuessingPhase: () => void;
+  skipCluePhase: () => void; // When timer expires during clue phase
 
   // AI Guessing helpers
   getAINextGuess: () => string | null;
@@ -92,6 +93,9 @@ interface AppState {
   // Game cancellation (when navigating away mid-game)
   gameCancelled: boolean;
   cancelGame: () => void;
+  
+  // Logout - clear profile and go to profile page
+  logout: () => void;
 }
 
 export const useAppState = create<AppState>()(
@@ -107,17 +111,60 @@ export const useAppState = create<AppState>()(
         console.log('🛑 [GAME] Game cancelled - stopping all AI processes');
         set({ gameCancelled: true });
       },
+      
+      // Logout - clear profile and reset state
+      logout: () => {
+        console.log('👋 [AUTH] Logging out...');
+        set({
+          profile: DEFAULT_PROFILE,
+          hasCompletedProfile: false,
+          game: null,
+          currentPage: 'profile',
+          gameCancelled: false,
+        });
+      },
 
       // User profile
       profile: DEFAULT_PROFILE,
       setProfile: (profile) => {
-        // Save to database
-        saveUser(profile);
-        set({ profile });
+        // Check if user exists in DB and has a summary
+        const existingUser = profile.email ? getUser(profile.email) : null;
+        const hasExistingSummary = !!(existingUser?.llmSummary);
         
-        // If user has played games before, update their summary based on profile changes
-        if (profile.email) {
-          updateSummaryOnProfileChange(profile.email).catch(err => {
+        // Merge existing summary into profile if not provided
+        const profileWithSummary = {
+          ...profile,
+          llmSummary: profile.llmSummary || existingUser?.llmSummary || '',
+        };
+        
+        // Save to database
+        saveUser(profileWithSummary);
+        set({ profile: profileWithSummary });
+        
+        // If user is NEW or has NO summary, generate initial summary from profile
+        if (profile.email && !hasExistingSummary) {
+          console.log('📝 [PROFILE] New user or no summary - generating initial summary...');
+          generateInitialSummary(profile).then(newSummary => {
+            if (newSummary) {
+              // Update profile and database with the new summary
+              const updatedProfile = { ...profile, llmSummary: newSummary };
+              saveUser(updatedProfile);
+              set({ profile: updatedProfile });
+            }
+          }).catch(err => {
+            console.error('Error generating initial summary:', err);
+          });
+        }
+        // If user HAS a summary, update it based on profile changes
+        else if (profile.email && hasExistingSummary) {
+          updateSummaryOnProfileChange(profile.email).then(newSummary => {
+            if (newSummary) {
+              // Sync updated summary back to profile state
+              set(state => ({
+                profile: { ...state.profile, llmSummary: newSummary }
+              }));
+            }
+          }).catch(err => {
             console.error('Error updating summary on profile change:', err);
           });
         }
@@ -146,7 +193,14 @@ export const useAppState = create<AppState>()(
         // After survey is submitted, update the user's LLM summary
         if (game && profile.email && game.status === 'gameOver') {
           const sessionData = extractGameSessionData(game, response.userFeedback, response);
-          updateSummaryAfterGame(profile.email, sessionData).catch(err => {
+          updateSummaryAfterGame(profile.email, sessionData).then(newSummary => {
+            if (newSummary) {
+              // Sync updated summary back to profile state
+              set(state => ({
+                profile: { ...state.profile, llmSummary: newSummary }
+              }));
+            }
+          }).catch(err => {
             console.error('Error updating summary after game:', err);
           });
         }
@@ -201,7 +255,7 @@ export const useAppState = create<AppState>()(
       },
 
       // Spymaster actions - submit clue and prepare AI guesses
-      submitClue: async (clue, number) => {
+      submitClue: async (clue, number, intendedTargets) => {
         const { game, profile, gameCancelled } = get();
         if (!game || gameCancelled) return;
 
@@ -212,14 +266,14 @@ export const useAppState = create<AppState>()(
         set({
           game: {
             ...game,
-            currentClue: { word: clue, number },
+            currentClue: { word: clue, number, intendedTargets },
             currentPhase: 'guess',
             guessesRemaining: guessesAllowed,
             currentTurnGuesses: [],
             currentTurnResults: [],
             turnStartTime: Date.now(),
             phaseTimeLimit: getPhaseTimeLimit(get().settings.timerMinutes),
-            aiPlannedGuesses: undefined, // Will be populated after AI call
+            aiPlannedGuesses: undefined as unknown as string[], // undefined = AI thinking, [] = AI passed, [...] = AI has guesses
             turnShouldEnd: false,
           },
         });
@@ -238,13 +292,14 @@ export const useAppState = create<AppState>()(
           // Check if cancelled during API call
           if (get().gameCancelled) return;
           
-          // Update with AI guesses
+          // Update with AI guesses and reasoning
           const currentGame = get().game;
           if (currentGame && currentGame.currentClue?.word === clue) {
             set({
               game: {
                 ...currentGame,
                 aiPlannedGuesses: aiResponse.guesses,
+                aiGuesserReasoning: aiResponse.reasoning,
               },
             });
           }
@@ -261,6 +316,7 @@ export const useAppState = create<AppState>()(
               game: {
                 ...currentGame,
                 aiPlannedGuesses: shuffled.slice(0, Math.min(number + 1, shuffled.length)),
+                aiGuesserReasoning: 'Fallback - random selection',
               },
             });
           }
@@ -291,7 +347,12 @@ export const useAppState = create<AppState>()(
           set({
             game: {
               ...game,
-              currentClue: { word: aiResponse.clue, number: aiResponse.number },
+              currentClue: { 
+                word: aiResponse.clue, 
+                number: aiResponse.number,
+                intendedTargets: aiResponse.targetWords,
+                reasoning: aiResponse.reasoning,
+              },
               currentPhase: 'guess',
               guessesRemaining: guessesAllowed,
               currentTurnGuesses: [],
@@ -421,6 +482,54 @@ export const useAppState = create<AppState>()(
           game.currentClue?.number || 0,
           game.currentTurnGuesses || [],
           game.currentTurnResults || [],
+          game.board.teamARemaining,
+          game.board.teamBRemaining,
+          game.currentClue?.intendedTargets,  // Store what the spymaster intended
+          game.currentClue?.reasoning,        // Store spymaster's reasoning
+          game.aiGuesserReasoning             // Store AI guesser's reasoning (if any)
+        );
+
+        const nextTeam: Team = game.currentTeam === 'teamA' ? 'teamB' : 'teamA';
+
+        set({
+          game: {
+            ...game,
+            currentTeam: nextTeam,
+            currentPhase: 'clue',
+            turnHistory: [...game.turnHistory, turnEvent],
+            currentClue: undefined,
+            guessesRemaining: 0,
+            currentTurnGuesses: [],
+            currentTurnResults: [],
+            turnStartTime: Date.now(),
+            phaseTimeLimit: getPhaseTimeLimit(get().settings.timerMinutes),
+            aiPlannedGuesses: [],
+            turnShouldEnd: false,
+            aiGuesserReasoning: undefined,
+          },
+        });
+      },
+
+      // Skip clue phase when timer expires (no clue given = forfeit turn)
+      skipCluePhase: () => {
+        const { game } = get();
+        if (!game) return;
+        if (game.status === 'gameOver') return;
+        if (game.currentPhase !== 'clue') {
+          console.log('Cannot skip clue phase - not in clue phase');
+          return;
+        }
+
+        console.log('⏰ [TIMER] Clue phase skipped - no clue given in time');
+
+        // Create a turn event with no clue (skipped turn)
+        const turnEvent = createTurnEvent(
+          game.currentTeam,
+          game.settings.playerRole === 'spymaster' ? 'spymaster' : 'guesser',
+          '[SKIPPED]', // No clue given
+          0,
+          [],
+          [],
           game.board.teamARemaining,
           game.board.teamBRemaining
         );

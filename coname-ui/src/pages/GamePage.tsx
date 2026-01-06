@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Home, Settings, Loader2 } from 'lucide-react';
+import { Home, Settings, Loader2, BarChart3 } from 'lucide-react';
 import { useAppState } from '../hooks/useGameState';
 import { GameBoard } from '../components/GameBoard';
 import { SidePanel } from '../components/SidePanel';
@@ -21,6 +21,7 @@ export function GamePage() {
     game,
     settings,
     profile,
+    setProfile,
     setCurrentPage,
     startNewGame,
     submitClue,
@@ -28,6 +29,7 @@ export function GamePage() {
     makeGuess,
     getAINextGuess,
     endGuessingPhase,
+    skipCluePhase,
     processRivalTurn,
     showSurvey,
     setShowSurvey,
@@ -64,6 +66,7 @@ export function GamePage() {
     if (!game || game.status !== 'playing' || hasTimerExpired.current) return;
     
     hasTimerExpired.current = true;
+    console.log('⏰ [TIMER] Time expired! Phase:', game.currentPhase);
     
     setTimeout(() => {
       const isGuessPhase = game.currentPhase === 'guess';
@@ -71,14 +74,16 @@ export function GamePage() {
       
       // If it's guess phase, end the turn
       if (isGuessPhase) {
+        console.log('⏰ [TIMER] Ending guess phase due to timeout');
         endGuessingPhase();
       }
-      // If it's clue phase, skip the turn
+      // If it's clue phase, skip the turn (no clue given)
       else if (isCluePhase) {
-        endGuessingPhase();
+        console.log('⏰ [TIMER] Skipping clue phase due to timeout');
+        skipCluePhase();
       }
     }, 100);
-  }, [game, endGuessingPhase]);
+  }, [game, endGuessingPhase, skipCluePhase]);
 
   // Reset timer expiration flag when turn changes
   useEffect(() => {
@@ -128,7 +133,12 @@ export function GamePage() {
     // Note: When submitted, addSurveyResponse in hooks handles the update with feedback
     if (!wasSubmitted && game && profile.email && game.status === 'gameOver') {
       const sessionData = extractGameSessionData(game);
-      updateSummaryAfterGame(profile.email, sessionData).catch(err => {
+      updateSummaryAfterGame(profile.email, sessionData).then(newSummary => {
+        if (newSummary) {
+          // Sync updated summary back to profile state
+          setProfile({ ...profile, llmSummary: newSummary });
+        }
+      }).catch(err => {
         console.error('Error updating summary after skipping survey:', err);
       });
     }
@@ -215,15 +225,16 @@ export function GamePage() {
     const isUserTurn = isUserTeam(game.currentTeam);
     const isSpymasterMode = settings.playerRole === 'spymaster';
     const isGuessPhase = game.currentPhase === 'guess';
-    const aiGuessesReady = game.aiPlannedGuesses !== undefined && game.aiPlannedGuesses !== null; // AI has actually responded
+    // undefined = AI is still thinking, [] = AI decided to pass, [...] = AI has guesses
+    const aiGuessesReady = Array.isArray(game.aiPlannedGuesses); // AI has actually responded (not undefined)
     const hasAIGuesses = aiGuessesReady && game.aiPlannedGuesses!.length > 0;
     const madeGuesses = game.currentTurnGuesses?.length || 0;
     const hasMoreGuesses = hasAIGuesses && madeGuesses < game.aiPlannedGuesses.length;
     const canContinue = !game.turnShouldEnd;
     
-    // If AI decided to pass (empty guesses array), end turn immediately
+    // If AI decided to pass (empty guesses array - NOT undefined which means still thinking)
     if (isUserTurn && isSpymasterMode && isGuessPhase && aiGuessesReady && !hasAIGuesses && !game.turnShouldEnd && !isProcessing) {
-      console.log('🤖 [AI GUESSER] AI decided to PASS - no confident guesses');
+      console.log('🤖 [AI GUESSER] AI decided to PASS - returned empty array (no confident guesses)');
       const timer = setTimeout(() => {
         endGuessingPhase();
       }, 1500);
@@ -371,6 +382,15 @@ export function GamePage() {
                 <span className="hidden sm:inline text-sm font-medium">{t('settings')}</span>
               </button>
 
+              {/* Metrics */}
+              <button
+                onClick={() => setCurrentPage('metrics')}
+                className="flex items-center gap-2 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-xl transition-colors"
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span className="hidden sm:inline text-sm font-medium">{isRTL ? 'מדדים' : 'Metrics'}</span>
+              </button>
+
               {/* Home */}
               <button
                 onClick={handleGoHome}
@@ -406,8 +426,8 @@ export function GamePage() {
                 {currentTeamDisplay} - {isCluePhase ? 'Clue Phase' : 'Guessing Phase'}
               </span>
               
-              {/* Countdown Timer - hide when waiting for user to click "Get Clue from AI Spymaster" */}
-              {!(isUserTurn && !isSpymasterMode && isCluePhase && !game.currentClue) && (
+              {/* Countdown Timer - hide when game over or waiting for user to click "Get Clue from AI Spymaster" */}
+              {game.status !== 'gameOver' && !(isUserTurn && !isSpymasterMode && isCluePhase && !game.currentClue) && (
                 <CountdownTimer
                   startTime={game.turnStartTime}
                   durationSeconds={game.phaseTimeLimit}
@@ -434,8 +454,11 @@ export function GamePage() {
               {isUserTurn && isSpymasterMode && isCluePhase && (
                 <ClueInput
                   boardWords={game.board.cards}
+                  teamWords={game.board.cards
+                    .filter(c => c.category === (settings.playerTeam === 'red' ? 'teamA' : 'teamB') && !c.revealed)
+                    .map(c => c.word)}
                   maxNumber={settings.playerTeam === 'red' ? game.board.teamARemaining : game.board.teamBRemaining}
-                  onSubmit={submitClue}
+                  onSubmit={(clue, number, intendedTargets) => submitClue(clue, number, intendedTargets)}
                 />
               )}
 
@@ -556,6 +579,8 @@ export function GamePage() {
           turnId={game.turnHistory[game.turnHistory.length - 1]?.id || ''}
           isOpen={showSurvey}
           playerRole={settings.playerRole}
+          turnHistory={game.turnHistory}
+          userTeam={settings.playerTeam === 'red' ? 'teamA' : 'teamB'}
           onClose={() => handleSurveyClose(false)}
           onSubmit={handleSurveySubmit}
         />
