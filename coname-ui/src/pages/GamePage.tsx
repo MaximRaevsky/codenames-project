@@ -11,8 +11,6 @@ import { GameOverModal } from '../components/GameOverModal';
 import { CountdownTimer } from '../components/CountdownTimer';
 import { RulesTooltip } from '../components/RulesTooltip';
 import { Logo } from '../components/Logo';
-import { LanguageSwitcher } from '../components/LanguageSwitcher';
-import { useLanguage } from '../i18n';
 import { extractGameSessionData } from '../utils/userDatabase';
 import { updateSummaryAfterGame } from '../utils/summaryAgent';
 
@@ -48,7 +46,6 @@ export function GamePage() {
   const hasTimerExpired = useRef(false);
   const gameCancelledRef = useRef(false); // Flag to stop AI processes
   
-  const { t, isRTL } = useLanguage();
 
   // Determine if it's user's turn based on team color preference
   // Use game.settings when game exists for consistency
@@ -367,9 +364,6 @@ export function GamePage() {
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Language Switcher */}
-              <LanguageSwitcher />
-
               {/* Game Rules Tooltip */}
               <RulesTooltip position="bottom" />
 
@@ -379,7 +373,7 @@ export function GamePage() {
                 className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl transition-colors"
               >
                 <Settings className="w-4 h-4" />
-                <span className="hidden sm:inline text-sm font-medium">{t('settings')}</span>
+                <span className="hidden sm:inline text-sm font-medium">Settings</span>
               </button>
 
               {/* Metrics */}
@@ -388,7 +382,7 @@ export function GamePage() {
                 className="flex items-center gap-2 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-xl transition-colors"
               >
                 <BarChart3 className="w-4 h-4" />
-                <span className="hidden sm:inline text-sm font-medium">{isRTL ? 'מדדים' : 'Metrics'}</span>
+                <span className="hidden sm:inline text-sm font-medium">Metrics</span>
               </button>
 
               {/* Home */}
@@ -397,7 +391,7 @@ export function GamePage() {
                 className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl transition-colors"
               >
                 <Home className="w-4 h-4" />
-                <span className="hidden sm:inline text-sm font-medium">{t('backToMenu')}</span>
+                <span className="hidden sm:inline text-sm font-medium">Back to Menu</span>
               </button>
             </div>
           </div>
@@ -487,10 +481,10 @@ export function GamePage() {
                   className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200"
                 >
                   <h3 className={`font-display font-bold text-lg ${userTeamColor === 'red' ? 'text-red-600' : 'text-blue-600'} mb-4`}>
-                    {t('aiTurn')}
+                    AI's Turn
                   </h3>
                   <p className="text-gray-500 mb-4">
-                    {isRTL ? 'שותף ה-AI שלך יספק לך רמז לניחוש.' : 'Your AI teammate will provide a clue for you to guess.'}
+                    Your AI teammate will provide a clue for you to guess.
                   </p>
                   <button
                     onClick={handleRequestAIClue}
@@ -504,10 +498,10 @@ export function GamePage() {
                     {isRequestingAIClue ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        {t('aiThinking')}
+                        AI is thinking...
                       </>
                     ) : (
-                      t('getAIClue')
+                      'Get Clue from AI'
                     )}
                   </button>
                 </motion.div>

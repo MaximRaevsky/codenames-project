@@ -5,8 +5,6 @@ import { Play, RotateCcw, ArrowRight, Bot, Users, Settings, Clock, Mail, AlertCi
 import { useAppState } from '../hooks/useGameState';
 import { Logo } from '../components/Logo';
 import { RulesTooltip } from '../components/RulesTooltip';
-import { LanguageSwitcher } from '../components/LanguageSwitcher';
-import { useLanguage } from '../i18n';
 
 // ============================================
 // CONSTANTS
@@ -24,24 +22,24 @@ const ANIMATION_DELAYS = {
 // SUB-COMPONENTS
 // ============================================
 
-const ColorLegend: FC<{ isRTL: boolean }> = ({ isRTL }) => (
+const ColorLegend: FC = () => (
   <div className="mt-4 p-4 bg-gray-50 rounded-xl">
-    <div className={`flex items-center gap-4 text-sm flex-wrap ${isRTL ? 'flex-row-reverse' : ''}`}>
+    <div className="flex items-center gap-4 text-sm flex-wrap">
       <div className="flex items-center gap-2">
         <div className="w-4 h-4 rounded bg-red-500" />
-        <span className="text-gray-700">{isRTL ? 'קבוצה אדומה' : 'Red Team'}</span>
+        <span className="text-gray-700">Red Team</span>
       </div>
       <div className="flex items-center gap-2">
         <div className="w-4 h-4 rounded bg-blue-500" />
-        <span className="text-gray-700">{isRTL ? 'קבוצה כחולה' : 'Blue Team'}</span>
+        <span className="text-gray-700">Blue Team</span>
       </div>
       <div className="flex items-center gap-2">
         <div className="w-4 h-4 rounded bg-amber-200" />
-        <span className="text-gray-700">{isRTL ? 'ניטרלי' : 'Neutral'}</span>
+        <span className="text-gray-700">Neutral</span>
       </div>
       <div className="flex items-center gap-2">
         <div className="w-4 h-4 rounded bg-gray-800" />
-        <span className="text-gray-700">{isRTL ? 'מתנקש' : 'Assassin'}</span>
+        <span className="text-gray-700">Assassin</span>
       </div>
     </div>
   </div>
@@ -63,8 +61,6 @@ export const WelcomePage: FC = () => {
     hasCompletedProfile,
     logout,
   } = useAppState();
-  
-  const { t, isRTL } = useLanguage();
 
   const hasValidEmail = profile.email && profile.email.length > 0;
 
@@ -114,11 +110,6 @@ export const WelcomePage: FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="relative z-10 max-w-2xl w-full"
       >
-        {/* Language Switcher */}
-        <div className="absolute top-0 right-0">
-          <LanguageSwitcher />
-        </div>
-        
         {/* Logo */}
         <div className="mb-8">
           <Logo size="lg" animate={true} />
@@ -166,28 +157,17 @@ export const WelcomePage: FC = () => {
         >
           <div className="flex items-start justify-between gap-4 mb-3">
             <h2 className="font-display font-semibold text-xl text-gray-800">
-              {isRTL ? 'שחק קודניימס עם שותף AI' : 'Play Codenames with an AI Teammate'}
+              Play Codenames with an AI Teammate
             </h2>
             <RulesTooltip position="left" />
           </div>
           <p className="text-gray-600 leading-relaxed">
-            {isRTL ? (
-              <>
-                שתף פעולה עם שותף AI לשחק קודניימס! כ
-                <span className="text-red-500 font-semibold">מנהל מרגלים</span>, אתה נותן רמזים ושותף ה-AI שלך מנחש.
-                כ<span className="text-blue-500 font-semibold">מנחש</span>, שותף ה-AI שלך נותן רמזים ואתה מפענח אותם.
-                עבדו יחד למצוא את כל המילים של הקבוצה לפני קבוצת ה-AI היריבה!
-              </>
-            ) : (
-              <>
-                Team up with an AI partner to play Codenames! As a{' '}
-                <span className="text-red-500 font-semibold">Spymaster</span>, you give clues while your AI teammate guesses.
-                As a <span className="text-blue-500 font-semibold">Guesser</span>, your AI teammate gives clues and you decode them.
-                Work together to find all your team's words before the rival AI team does!
-              </>
-            )}
+            Team up with an AI partner to play Codenames! As a{' '}
+            <span className="text-red-500 font-semibold">Spymaster</span>, you give clues while your AI teammate guesses.
+            As a <span className="text-blue-500 font-semibold">Guesser</span>, your AI teammate gives clues and you decode them.
+            Work together to find all your team's words before the rival AI team does!
           </p>
-          <ColorLegend isRTL={isRTL} />
+          <ColorLegend />
         </motion.div>
 
         {/* Team Selection */}
@@ -198,10 +178,10 @@ export const WelcomePage: FC = () => {
           className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-gray-200 shadow-lg"
         >
           <h3 className="font-display font-semibold text-lg text-gray-800 mb-2">
-            {isRTL ? 'בחר קבוצה' : 'Choose Your Team'}
+            Choose Your Team
           </h3>
           <p className="text-sm text-gray-500 mb-4">
-            {isRTL ? 'הקבוצה המתחילה נבחרת באקראי בכל משחק' : 'Starting team is randomly chosen each game'}
+            Starting team is randomly chosen each game
           </p>
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -211,11 +191,11 @@ export const WelcomePage: FC = () => {
               <div className="flex items-center justify-center gap-2 mb-2">
                 <div className="w-6 h-6 rounded-full bg-red-500" />
                 <span className={`font-display font-semibold ${settings.playerTeam === 'red' ? 'text-red-600' : 'text-gray-700'}`}>
-                  {isRTL ? 'קבוצה אדומה' : 'Red Team'}
+                  Red Team
                 </span>
               </div>
               <div className="text-sm text-gray-500">
-                {isRTL ? 'אתה + AI נגד קבוצה כחולה' : 'You + AI vs Blue Team'}
+                You + AI vs Blue Team
               </div>
             </button>
 
@@ -226,11 +206,11 @@ export const WelcomePage: FC = () => {
               <div className="flex items-center justify-center gap-2 mb-2">
                 <div className="w-6 h-6 rounded-full bg-blue-500" />
                 <span className={`font-display font-semibold ${settings.playerTeam === 'blue' ? 'text-blue-600' : 'text-gray-700'}`}>
-                  {isRTL ? 'קבוצה כחולה' : 'Blue Team'}
+                  Blue Team
                 </span>
               </div>
               <div className="text-sm text-gray-500">
-                {isRTL ? 'אתה + AI נגד קבוצה אדומה' : 'You + AI vs Red Team'}
+                You + AI vs Red Team
               </div>
             </button>
           </div>
@@ -244,7 +224,7 @@ export const WelcomePage: FC = () => {
           className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 mb-6 border border-gray-200 shadow-lg"
         >
           <h3 className="font-display font-semibold text-lg text-gray-800 mb-4">
-            {t('selectRole')}
+            Select Your Role
           </h3>
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -254,14 +234,14 @@ export const WelcomePage: FC = () => {
               <div className="flex items-center justify-center gap-2 mb-2">
                 <Users className={`w-5 h-5 ${settings.playerRole === 'spymaster' ? 'text-purple-600' : 'text-gray-500'}`} />
                 <span className={`font-display font-semibold ${settings.playerRole === 'spymaster' ? 'text-purple-600' : 'text-gray-700'}`}>
-                  {t('spymaster')}
+                  Spymaster
                 </span>
               </div>
               <div className="text-sm text-gray-500">
-                {isRTL ? 'אתה רואה את כל הצבעים ונותן רמזים' : 'You see all colors & give clues'}
+                You see all colors & give clues
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                {isRTL ? 'שותף ה-AI מנחש' : 'AI teammate guesses'}
+                AI teammate guesses
               </div>
             </button>
 
@@ -272,14 +252,14 @@ export const WelcomePage: FC = () => {
               <div className="flex items-center justify-center gap-2 mb-2">
                 <Bot className={`w-5 h-5 ${settings.playerRole === 'guesser' ? 'text-purple-600' : 'text-gray-500'}`} />
                 <span className={`font-display font-semibold ${settings.playerRole === 'guesser' ? 'text-purple-600' : 'text-gray-700'}`}>
-                  {t('guesser')}
+                  Guesser
                 </span>
               </div>
               <div className="text-sm text-gray-500">
-                {isRTL ? 'ה-AI נותן רמזים, אתה מנחש' : 'AI gives clues, you guess'}
+                AI gives clues, you guess
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                {isRTL ? 'הצבעים מוסתרים ממך' : 'Colors hidden from you'}
+                Colors hidden from you
               </div>
             </button>
           </div>
@@ -341,17 +321,17 @@ export const WelcomePage: FC = () => {
           >
             <Play className="w-6 h-6" />
             {!hasValidEmail 
-              ? (isRTL ? 'השלם פרופיל קודם' : 'Complete Profile First')
+              ? 'Complete Profile First'
               : hasCompletedProfile 
-                ? t('startNewGame')
-                : (isRTL ? 'הגדר פרופיל והתחל' : 'Set Up Profile & Play')}
+                ? 'Start New Game'
+                : 'Set Up Profile & Play'}
             <ArrowRight className="w-5 h-5" />
           </button>
 
           {!hasValidEmail && (
             <p className="text-center text-sm text-amber-700 bg-amber-50 py-2 px-4 rounded-lg border border-amber-200">
-              <span className="font-semibold">⚠️ {isRTL ? 'נדרש אימייל:' : 'Email required:'}</span>{' '}
-              {isRTL ? 'אנא השלם את הפרופיל שלך כדי להתחיל לשחק' : 'Please complete your profile to start playing'}
+              <span className="font-semibold">⚠️ Email required:</span>{' '}
+              Please complete your profile to start playing
             </p>
           )}
 
@@ -361,7 +341,7 @@ export const WelcomePage: FC = () => {
               className="w-full flex items-center justify-center gap-3 py-3 px-6 bg-white hover:bg-gray-50 text-gray-700 font-display font-semibold rounded-xl transition-colors border border-gray-200 shadow"
             >
               <RotateCcw className="w-5 h-5" />
-              {t('continueGame')}
+              Continue Game
             </button>
           )}
 
@@ -384,7 +364,7 @@ export const WelcomePage: FC = () => {
                   className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 >
                   <LogOut className="w-4 h-4" />
-                  {isRTL ? 'התנתק' : 'Logout'}
+                  Logout
                 </button>
               </div>
               
@@ -395,14 +375,14 @@ export const WelcomePage: FC = () => {
                   className="flex-1 flex items-center justify-center gap-2 py-3 px-6 bg-gray-100 hover:bg-gray-200 text-gray-600 font-display rounded-xl transition-colors"
                 >
                   <Settings className="w-5 h-5" />
-                  {t('editProfile')}
+                  Edit Profile
                 </button>
                 <button
                   onClick={() => setCurrentPage('metrics')}
                   className="flex-1 flex items-center justify-center gap-2 py-3 px-6 bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 text-purple-700 font-display rounded-xl transition-colors border border-purple-200"
                 >
                   <BarChart3 className="w-5 h-5" />
-                  {isRTL ? 'מדדים' : 'Metrics'}
+                  Metrics
                 </button>
               </div>
             </div>

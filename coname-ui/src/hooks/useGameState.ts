@@ -212,12 +212,9 @@ export const useAppState = create<AppState>()(
       startNewGame: () => {
         const { settings } = get();
         
-        // Get language from localStorage
-        const language = (localStorage.getItem('coname-language') || 'en') as 'en' | 'he';
-        
         // Randomize who starts (50/50 chance)
         const startingTeam: Team = Math.random() < 0.5 ? 'teamA' : 'teamB';
-        const board = generateBoard(startingTeam, language);
+        const board = generateBoard(startingTeam);
         
         const newGame: GameState = {
           id: generateId(),

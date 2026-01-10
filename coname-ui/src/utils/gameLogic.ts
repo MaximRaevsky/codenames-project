@@ -1,8 +1,7 @@
 import { BoardState, WordCard, CardCategory, Team, TurnEvent } from '../types/game';
-import type { Language } from '../i18n/translations';
 
 // Official Codenames word bank (400 words)
-const WORD_BANK_EN = [
+const WORD_BANK = [
   'AFRICA', 'AGENT', 'AIR', 'ALIEN', 'ALPS', 'AMAZON', 'AMBULANCE', 'AMERICA',
   'ANGEL', 'ANTARCTICA', 'APPLE', 'ARM', 'ATLANTIS', 'AUSTRALIA', 'AZTEC',
   'BACK', 'BALL', 'BAND', 'BANK', 'BAR', 'BARK', 'BAT', 'BATTERY', 'BEACH',
@@ -52,35 +51,6 @@ const WORD_BANK_EN = [
   'WIND', 'WITCH', 'WORM', 'YARD'
 ];
 
-// Hebrew word bank - מילים בעברית
-const WORD_BANK_HE = [
-  'שמש', 'ירח', 'כוכב', 'ים', 'הר', 'עץ', 'פרח', 'ציפור', 'דג', 'חתול',
-  'כלב', 'אריה', 'נחש', 'פיל', 'סוס', 'דוב', 'זאב', 'נשר', 'יונה', 'עכביש',
-  'לב', 'עין', 'יד', 'רגל', 'ראש', 'אוזן', 'אף', 'פה', 'שיער', 'אצבע',
-  'בית', 'דלת', 'חלון', 'גג', 'קיר', 'רצפה', 'מדרגות', 'גן', 'גדר', 'שער',
-  'מכונית', 'אוטובוס', 'רכבת', 'מטוס', 'אונייה', 'אופניים', 'מסוק', 'טיל', 'סירה', 'משאית',
-  'ספר', 'עט', 'מחברת', 'שולחן', 'כיסא', 'מנורה', 'שעון', 'טלפון', 'מחשב', 'מסך',
-  'תפוח', 'בננה', 'תפוז', 'ענב', 'לימון', 'עגבנייה', 'מלפפון', 'גזר', 'בצל', 'תפוד',
-  'לחם', 'חלב', 'ביצה', 'גבינה', 'בשר', 'דג', 'אורז', 'פסטה', 'מרק', 'עוגה',
-  'מלך', 'מלכה', 'נסיך', 'נסיכה', 'אביר', 'קסם', 'דרקון', 'מכשפה', 'שד', 'גמד',
-  'חרב', 'מגן', 'חץ', 'קשת', 'תותח', 'פצצה', 'טנק', 'רובה', 'אקדח', 'סכין',
-  'רופא', 'אחות', 'מורה', 'שוטר', 'חייל', 'טייס', 'נהג', 'טבח', 'צייר', 'זמר',
-  'כדורגל', 'כדורסל', 'טניס', 'שחייה', 'ריצה', 'קפיצה', 'משחק', 'כדור', 'מגרש', 'גביע',
-  'זהב', 'כסף', 'יהלום', 'אבן', 'ברזל', 'נחושת', 'זכוכית', 'עץ', 'פלסטיק', 'נייר',
-  'אש', 'מים', 'רוח', 'אדמה', 'שלג', 'גשם', 'ברק', 'ענן', 'קשת', 'סערה',
-  'לילה', 'יום', 'בוקר', 'ערב', 'שבוע', 'חודש', 'שנה', 'קיץ', 'חורף', 'אביב',
-  'אהבה', 'שלום', 'מלחמה', 'חיים', 'מוות', 'חלום', 'זיכרון', 'סוד', 'אמת', 'שקר',
-  'מוזיקה', 'שיר', 'ריקוד', 'תמונה', 'פסל', 'תיאטרון', 'קולנוע', 'ספרייה', 'מוזיאון', 'גלריה',
-  'ירושלים', 'תאביב', 'חיפה', 'אילת', 'מדבר', 'כנרת', 'נגב', 'גליל', 'כרמל', 'מצדה',
-  'פירמידה', 'מגדל', 'גשר', 'מנהרה', 'טירה', 'ארמון', 'מקדש', 'כנסייה', 'מסגד', 'בית',
-  'חלל', 'כוכב', 'גלקסיה', 'לוויין', 'רקטה', 'אסטרונאוט', 'חייזר', 'מאדים', 'צדק', 'שבתאי'
-];
-
-// Get word bank by language
-function getWordBank(language: Language = 'en'): string[] {
-  return language === 'he' ? WORD_BANK_HE : WORD_BANK_EN;
-}
-
 // Shuffle array using Fisher-Yates
 function shuffle<T>(array: T[]): T[] {
   const result = [...array];
@@ -92,10 +62,9 @@ function shuffle<T>(array: T[]): T[] {
 }
 
 // Generate a new game board
-export function generateBoard(startingTeam: Team = 'teamA', language: Language = 'en'): BoardState {
-  // Pick 25 random words from the appropriate word bank
-  const wordBank = getWordBank(language);
-  const shuffledWords = shuffle(wordBank).slice(0, 25);
+export function generateBoard(startingTeam: Team = 'teamA'): BoardState {
+  // Pick 25 random words from the word bank
+  const shuffledWords = shuffle(WORD_BANK).slice(0, 25);
   
   // Assign categories: 9 for starting team, 8 for other, 7 neutral, 1 assassin
   const categories: CardCategory[] = [

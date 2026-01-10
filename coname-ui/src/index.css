@@ -163,60 +163,6 @@ input[type="range"]::-moz-range-thumb {
   }
 }
 
-/* RTL Support */
-[dir="rtl"] {
-  text-align: right;
-}
-
-[dir="rtl"] .flex-row {
-  flex-direction: row-reverse;
-}
-
-/* Hebrew font support */
-[lang="he"] {
-  font-family: 'Heebo', 'Inter', system-ui, -apple-system, sans-serif;
-}
-
-/* Language Switcher */
-.language-switcher {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(8px);
-  padding: 4px 8px;
-  border-radius: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.lang-btn {
-  background: transparent;
-  border: none;
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
-  cursor: pointer;
-  border-radius: 12px;
-  transition: all 0.2s ease;
-}
-
-.lang-btn:hover {
-  color: #3b82f6;
-  background: rgba(59, 130, 246, 0.1);
-}
-
-.lang-btn.active {
-  color: #ffffff;
-  background: #3b82f6;
-}
-
-.lang-divider {
-  color: #cbd5e1;
-  font-size: 12px;
-}
-
 /* Loading Spinner */
 .loading-spinner {
   display: inline-block;
