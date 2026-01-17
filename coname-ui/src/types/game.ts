@@ -48,6 +48,9 @@ export interface TurnEvent {
   
   // Guesser's reasoning for their guesses (AI guesser only)
   guesserReasoning?: string;
+  
+  // AI Guesser's confidence evaluations for ALL words (for persistent tracking)
+  guesserWordConfidences?: { word: string; confidence: number }[];
 }
 
 export interface GuessResult {
@@ -175,9 +178,15 @@ export interface GameState {
   // AI reasoning (stored temporarily during turn, saved to turn history at end)
   aiGuesserReasoning?: string;
   
+  // AI guesser's confidence evaluations for all words (for persistent tracking)
+  aiGuesserWordConfidences?: { word: string; confidence: number }[];
+  
   // Game metadata
   startingTeam?: Team;
   gameOverReason?: string;
+  
+  // Debug confidence tracking
+  debugConfidence?: DebugConfidenceState;
 }
 
 // ============================================
@@ -205,7 +214,45 @@ export interface GuesserResponse {
   guesses: string[];
   confidence?: number[];
   reasoning?: string;
-  // TODO: Add word-by-word explanation from AI
+  // AI's confidence evaluation for ALL unrevealed words (for persistent tracking)
+  allWordConfidences?: { word: string; confidence: number }[];
+}
+
+// ============================================
+// DEBUG CONFIDENCE TRACKING
+// ============================================
+
+export interface WordConfidenceEntry {
+  word: string;
+  currentClueConfidence: number;      // Confidence from current clue evaluation
+  storedConfidence: number;           // Confidence from previous turns (with decay)
+  finalConfidence: number;            // Higher of current vs stored
+  source: 'current' | 'stored';       // Which one was used
+  fromClue?: string;                  // Which clue this confidence came from
+  fromTurn?: number;                  // Which turn number
+  turnsAgo?: number;                  // How many turns ago (for decay calculation)
+  decayMultiplier?: number;           // The decay multiplier applied (0.9^turnsAgo)
+  isZeroed: boolean;                  // Whether this word was zeroed (by avoidance/rival)
+  zeroedBy?: string;                  // Which clue zeroed it
+  isSelected: boolean;                // Whether this word was selected for guessing
+  threshold: number;                  // The confidence threshold for selection (50)
+}
+
+export interface TurnConfidenceSnapshot {
+  turnNumber: number;
+  team: Team;
+  clue: string;
+  clueNumber: number;
+  timestamp: number;
+  wordConfidences: WordConfidenceEntry[];
+  selectedGuesses: string[];
+  threshold: number;
+}
+
+export interface DebugConfidenceState {
+  userTeamSnapshots: TurnConfidenceSnapshot[];
+  rivalTeamSnapshots: TurnConfidenceSnapshot[];
+  currentTurnSnapshot?: TurnConfidenceSnapshot;
 }
 
 // ============================================

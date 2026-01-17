@@ -33,10 +33,16 @@ export function ClueInput({ boardWords, teamWords, maxNumber, onSubmit }: ClueIn
     
     if (!clue.trim()) return;
     
-    // Require at least one target word
-    if (selectedTargets.length === 0) {
+    // Require target words (except when number is 0)
+    const effectiveNumber = isInfinity ? -1 : number;
+    if (effectiveNumber !== 0 && selectedTargets.length === 0) {
       setError('Please select at least one word you\'re trying to connect');
       return;
+    }
+    
+    // Warn if selected targets don't match number (but allow it)
+    if (!isInfinity && number > 0 && selectedTargets.length !== number) {
+      // Just a soft warning, don't block
     }
 
     // Start validation
@@ -122,7 +128,16 @@ export function ClueInput({ boardWords, teamWords, maxNumber, onSubmit }: ClueIn
                 value={isInfinity ? '' : number}
                 onChange={(e) => {
                   setIsInfinity(false);
-                  setNumber(parseInt(e.target.value));
+                  const newNumber = parseInt(e.target.value);
+                  setNumber(newNumber);
+                  // Clear selections if new number is 0
+                  if (newNumber === 0) {
+                    setSelectedTargets([]);
+                  }
+                  // Trim selections if exceeding new number
+                  else if (selectedTargets.length > newNumber) {
+                    setSelectedTargets(prev => prev.slice(0, newNumber));
+                  }
                 }}
                 disabled={isInfinity || isValidating}
                 className={`w-16 px-2 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 font-mono text-center focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent ${
@@ -158,32 +173,58 @@ export function ClueInput({ boardWords, teamWords, maxNumber, onSubmit }: ClueIn
           </p>
         )}
 
+        {number === 0 && !isInfinity && (
+          <p className="text-sm text-blue-600 bg-blue-50 p-2 rounded-lg">
+            Giving 0 means you're not targeting any specific words. This is a special strategy clue.
+          </p>
+        )}
+
         {/* Target Word Selection */}
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm text-gray-600 font-medium">
             <Target className="w-4 h-4" />
-            Which words are you targeting? (click to select)
+            {number === 0 && !isInfinity ? (
+              <span className="text-gray-400">Word selection disabled for 0 clues</span>
+            ) : isInfinity ? (
+              <span>Select the words you're targeting (any amount)</span>
+            ) : (
+              <span>Select <strong className="text-red-600">{number}</strong> word{number > 1 ? 's' : ''} you're targeting</span>
+            )}
           </label>
           <div className="flex flex-wrap gap-2">
-            {teamWords.map(word => (
-              <button
-                key={word}
-                type="button"
-                onClick={() => toggleTarget(word)}
-                disabled={isValidating}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  selectedTargets.includes(word)
-                    ? 'bg-red-500 text-white shadow-md scale-105'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {word}
-              </button>
-            ))}
+            {teamWords.map(word => {
+              const isSelected = selectedTargets.includes(word);
+              const isDisabled = isValidating || (number === 0 && !isInfinity);
+              // When not infinity and number is set, limit selection
+              const atLimit = !isInfinity && number > 0 && selectedTargets.length >= number && !isSelected;
+              
+              return (
+                <button
+                  key={word}
+                  type="button"
+                  onClick={() => toggleTarget(word)}
+                  disabled={isDisabled || atLimit}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    isSelected
+                      ? 'bg-red-500 text-white shadow-md scale-105'
+                      : isDisabled
+                      ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                      : atLimit
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {word}
+                </button>
+              );
+            })}
           </div>
           {selectedTargets.length > 0 && (
             <p className="text-xs text-gray-500">
               Selected {selectedTargets.length} word{selectedTargets.length > 1 ? 's' : ''}: {selectedTargets.join(', ')}
+              {!isInfinity && number > 0 && selectedTargets.length < number && (
+                <span className="text-orange-500 ml-2">(select {number - selectedTargets.length} more)</span>
+              )}
             </p>
           )}
         </div>
@@ -241,7 +282,15 @@ export function ClueInput({ boardWords, teamWords, maxNumber, onSubmit }: ClueIn
 
         <button
           type="submit"
-          disabled={!clue.trim() || isValidating || validationSuccess}
+          disabled={
+            !clue.trim() || 
+            isValidating || 
+            validationSuccess ||
+            // For number > 0, require exactly that many words selected
+            (!isInfinity && number > 0 && selectedTargets.length !== number) ||
+            // For infinity, require at least 1 word selected
+            (isInfinity && selectedTargets.length === 0)
+          }
           className="w-full flex items-center justify-center gap-2 py-3 px-6 bg-red-500 hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-display font-bold rounded-xl transition-colors shadow-md"
         >
           {isValidating ? (

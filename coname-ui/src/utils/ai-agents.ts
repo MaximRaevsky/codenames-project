@@ -19,8 +19,6 @@ import {
   buildGuesserUserPrompt,
   buildRivalSpymasterSystemPrompt,
   buildRivalGuesserSystemPrompt,
-  buildValidatorSystemPrompt,
-  buildValidatorUserPrompt,
 } from './prompt-builders';
 import {
   BoardState,
@@ -218,7 +216,7 @@ export async function aiSpymaster(
 
 /**
  * AI Guesser for the user's team (when user is Spymaster)
- * Interprets user's clues, personalized to understand their style
+ * Uses PERSISTENT WORD CONFIDENCE tracking across all turns
  */
 export async function aiGuesser(
   clue: string,
@@ -234,44 +232,145 @@ export async function aiGuesser(
   console.log('🔍 [AI GUESSER] Received clue: "' + clue + '" for ' + clueNumber + ' words');
   console.log('🔍 [AI GUESSER] Team:', team === 'teamA' ? 'RED' : 'BLUE');
   
-  // Log available words (guesser doesn't know categories)
+  const isAvoidanceClue = clueNumber === 0;
   const unrevealedWords = board.cards.filter(c => !c.revealed).map(c => c.word);
-  console.log('🔍 [AI GUESSER] Available words on board:', unrevealedWords.join(', '));
-  console.log('🔍 [AI GUESSER] Already guessed this turn:', currentGuesses.length > 0 ? currentGuesses.join(', ') : 'None');
-  
-  // +1 RULE ANALYSIS
-  const maxGuessesAllowed = clueNumber === -1 ? 99 : clueNumber + 1;
-  console.log('🔍 [AI GUESSER] ═══ +1 RULE ANALYSIS ═══');
-  console.log('   📢 Current clue: "' + clue + '" for ' + clueNumber);
-  console.log('   🎯 Max guesses allowed: ' + maxGuessesAllowed + ' (clue number + 1)');
-  
-  // Analyze previous turns for leftover words
   const teamHistory = turnHistory.filter(t => t.team === team);
-  const leftoverClues: { clue: string; expected: number; got: number; missed: number }[] = [];
+  const rivalHistory = turnHistory.filter(t => t.team !== team);
+  const currentTurnNumber = teamHistory.length + 1;
   
-  for (const turn of teamHistory) {
-    const correctCount = turn.guessResults.filter(r => r.correct).length;
-    if (turn.clueNumber > 0 && correctCount < turn.clueNumber) {
-      const missed = turn.clueNumber - correctCount;
-      leftoverClues.push({
-        clue: turn.clue,
-        expected: turn.clueNumber,
-        got: correctCount,
-        missed
+  // ═══════════════════════════════════════════════════════════════════════
+  // STEP 1: BUILD PERSISTENT WORD CONFIDENCE MAP FROM ALL PREVIOUS TURNS
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('📊 [CONFIDENCE TRACKER] ═══ BUILDING PERSISTENT CONFIDENCE MAP ═══');
+  
+  // Initialize confidence map for all unrevealed words
+  const wordConfidenceMap: Map<string, { 
+    confidence: number; 
+    fromClue: string; 
+    fromTurn: number;
+  }> = new Map();
+  
+  // Initialize all words at 0%
+  unrevealedWords.forEach(word => {
+    wordConfidenceMap.set(word.toUpperCase(), { 
+      confidence: 0, 
+      fromClue: '', 
+      fromTurn: 0
+    });
+  });
+  
+  // Process each of OUR TEAM's previous turns (chronologically)
+  // Use STORED GUESSER CONFIDENCES from each turn (not just intended targets)
+  console.log('');
+  console.log('📜 [CONFIDENCE TRACKER] Processing YOUR TEAM\'s turn history:');
+  
+  for (let i = 0; i < teamHistory.length; i++) {
+    const turn = teamHistory[i];
+    const turnNumber = i + 1;
+    const turnsAgo = currentTurnNumber - turnNumber;
+    const decayMultiplier = Math.pow(0.9, turnsAgo);
+    
+    console.log(`   Turn ${turnNumber}: Clue "${turn.clue}" (${turn.clueNumber}) - ${turnsAgo} turn(s) ago, decay: ${(decayMultiplier * 100).toFixed(0)}%`);
+    
+    // Use stored guesser confidence evaluations from this turn (if available)
+    if (turn.guesserWordConfidences && turn.guesserWordConfidences.length > 0) {
+      console.log(`      📊 Loading ${turn.guesserWordConfidences.length} stored confidence evaluations`);
+      
+      turn.guesserWordConfidences.forEach(wc => {
+        const wordUpper = wc.word.toUpperCase();
+        
+        // Skip if word is no longer on board (was revealed)
+        if (!unrevealedWords.map(w => w.toUpperCase()).includes(wordUpper)) {
+          return;
+        }
+        
+        // Apply decay to stored confidence
+        const decayedConfidence = Math.round(wc.confidence * decayMultiplier);
+        
+        // Only update if this gives higher confidence
+        const existing = wordConfidenceMap.get(wordUpper);
+        if (!existing || decayedConfidence > existing.confidence) {
+          wordConfidenceMap.set(wordUpper, {
+            confidence: decayedConfidence,
+            fromClue: turn.clue,
+            fromTurn: turnNumber
+          });
+        }
       });
+    } else {
+      // Fallback: use intended targets if no stored confidences
+      console.log(`      ⚠️ No stored confidences - using intended targets as fallback`);
+      if (turn.intendedTargets && turn.intendedTargets.length > 0) {
+        turn.intendedTargets.forEach((targetWord: string) => {
+          const wordUpper = targetWord.toUpperCase();
+          const wasGuessedCorrectly = turn.guessResults.some(
+            r => r.word.toUpperCase() === wordUpper && r.correct
+          );
+          
+          if (!wasGuessedCorrectly && unrevealedWords.map(w => w.toUpperCase()).includes(wordUpper)) {
+            const baseConfidence = 90;
+            const decayedConfidence = Math.round(baseConfidence * decayMultiplier);
+            
+            const existing = wordConfidenceMap.get(wordUpper);
+            if (!existing || decayedConfidence > existing.confidence) {
+              wordConfidenceMap.set(wordUpper, {
+                confidence: decayedConfidence,
+                fromClue: turn.clue,
+                fromTurn: turnNumber
+              });
+            }
+          }
+        });
+      }
     }
   }
   
-  if (leftoverClues.length > 0) {
-    console.log('   ⚠️ LEFTOVER WORDS FROM PREVIOUS TURNS:');
-    leftoverClues.forEach(l => {
-      console.log(`      • "${l.clue}" - expected ${l.expected}, got ${l.got} → ${l.missed} word(s) still unguessed!`);
-    });
-    console.log('   💡 Can use +1 to catch up on these if VERY confident (>80%)');
+  // ═══════════════════════════════════════════════════════════════════════
+  // STEP 2: PROCESS RIVAL TURNS - ZERO OUT WORDS THAT MATCH RIVAL CLUES
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('👿 [CONFIDENCE TRACKER] Processing RIVAL TEAM\'s turns (to identify dangerous words):');
+  
+  // Note: We don't use rival's intended targets - that would be cheating!
+  // The AI guesser only knows about revealed cards (visible to all players)
+  if (rivalHistory.length > 0) {
+    console.log(`   Rival has taken ${rivalHistory.length} turn(s) - we only know revealed cards`);
   } else {
-    console.log('   ✅ No leftover words from previous turns');
+    console.log('   (No rival turns yet)');
   }
-  console.log('🔍 [AI GUESSER] ═══════════════════════');
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // STEP 3: LOG CURRENT CONFIDENCE STATE (BEFORE CURRENT CLUE)
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('📊 [CONFIDENCE TRACKER] ═══ CONFIDENCE STATE BEFORE CURRENT CLUE ═══');
+  
+  const sortedByConfidence = Array.from(wordConfidenceMap.entries())
+    .sort((a, b) => b[1].confidence - a[1].confidence);
+  
+  sortedByConfidence.forEach(([word, data], i) => {
+    const bar = '█'.repeat(Math.floor(data.confidence / 10)) + '░'.repeat(10 - Math.floor(data.confidence / 10));
+    const source = data.fromClue ? ` (from "${data.fromClue}" turn ${data.fromTurn})` : '';
+    console.log(`   ${(i + 1).toString().padStart(2)}. ${word.padEnd(15)} ${bar} ${data.confidence}%${source}`);
+  });
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // STEP 4: HANDLE CURRENT CLUE
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('🔍 [AI GUESSER] ═══ CURRENT CLUE ANALYSIS ═══');
+  console.log(`   📢 Current clue: "${clue}" for ${clueNumber === 0 ? '0 (AVOIDANCE)' : clueNumber === -1 ? 'UNLIMITED' : clueNumber}`);
+  
+  if (isAvoidanceClue) {
+    console.log('   ⚠️ THIS IS AN AVOIDANCE CLUE (0)!');
+    console.log('   → Will identify words related to this clue as DANGEROUS');
+    console.log('   → Will ONLY guess words with existing confidence HIGHER than their relatedness to this clue');
+  }
+  
+  const maxGuessesAllowed = (clueNumber === -1 || clueNumber === 0) ? 99 : clueNumber + 1;
+  console.log(`   🎯 Max guesses allowed: ${isAvoidanceClue ? 'UNLIMITED (but only safe words)' : maxGuessesAllowed}`);
+  console.log('🔍 [AI GUESSER] ═══════════════════════════════');
 
   try {
     const systemPrompt = buildGuesserSystemPrompt(team, true, profile);
@@ -297,119 +396,254 @@ export async function aiGuesser(
     // Log ALL word confidences for tracking
     const allWordConfidences = (parsed as unknown as { allWordConfidences?: { word: string; confidence: number }[] }).allWordConfidences;
     if (allWordConfidences && Array.isArray(allWordConfidences) && allWordConfidences.length > 0) {
-      // Sort by confidence descending
-      const sorted = [...allWordConfidences].sort((a, b) => b.confidence - a.confidence);
       
-      console.log('📋 [AI GUESSER] ═══ ALL WORD CONFIDENCES FOR CURRENT CLUE "' + clue + '" ═══');
+      // ═══════════════════════════════════════════════════════════════════════
+      // MERGE: Take HIGHER of current clue confidence vs stored confidence
+      // ═══════════════════════════════════════════════════════════════════════
+      console.log('');
+      console.log('🔄 [MERGE] ═══ COMPARING CURRENT CLUE VS STORED CONFIDENCES ═══');
+      
+      const mergedConfidences: { word: string; confidence: number; source: string; fromClue: string }[] = [];
+      
+      allWordConfidences.forEach(w => {
+        const wordUpper = w.word.toUpperCase();
+        const currentConf = w.confidence;
+        const stored = wordConfidenceMap.get(wordUpper);
+        const storedConf = stored?.confidence || 0;
+        const storedClue = stored?.fromClue || '';
+        
+        let finalConf: number;
+        let source: string;
+        let fromClue: string;
+        
+        if (storedConf > currentConf) {
+          // Stored is higher - use it
+          finalConf = storedConf;
+          source = 'stored';
+          fromClue = storedClue;
+          console.log(`   🔄 ${w.word.padEnd(15)} stored ${storedConf}% (from "${storedClue}") > current ${currentConf}% → USING STORED`);
+        } else if (currentConf > storedConf && currentConf > 0) {
+          // Current is higher - use it
+          finalConf = currentConf;
+          source = 'current';
+          fromClue = clue;
+          if (storedConf > 0) {
+            console.log(`   🔄 ${w.word.padEnd(15)} current ${currentConf}% > stored ${storedConf}% (from "${storedClue}") → USING CURRENT`);
+          }
+        } else {
+          // Equal or both low - use current
+          finalConf = currentConf;
+          source = 'current';
+          fromClue = clue;
+        }
+        
+        mergedConfidences.push({ word: w.word, confidence: finalConf, source, fromClue });
+      });
+      
+      console.log('🔄 [MERGE] ═══════════════════════════════════════════════════════');
+      console.log('');
+      
+      // Sort by MERGED confidence descending
+      const sorted = [...mergedConfidences].sort((a, b) => b.confidence - a.confidence);
+      
+      console.log('📋 [AI GUESSER] ═══ MERGED WORD CONFIDENCES (taking higher of current vs stored) ═══');
       sorted.forEach((w, i) => {
         const bar = '█'.repeat(Math.floor(w.confidence / 10)) + '░'.repeat(10 - Math.floor(w.confidence / 10));
         const marker = w.confidence >= 50 ? '✅' : w.confidence >= 30 ? '⚠️' : '❌';
-        console.log(`   ${marker} ${(i + 1).toString().padStart(2)}. ${w.word.padEnd(15)} ${bar} ${w.confidence}%`);
+        const sourceInfo = w.source === 'stored' ? ` ← from "${w.fromClue}"` : '';
+        console.log(`   ${marker} ${(i + 1).toString().padStart(2)}. ${w.word.padEnd(15)} ${bar} ${w.confidence}%${sourceInfo}`);
       });
       console.log('📋 [AI GUESSER] ═══════════════════════════════════════════════════════');
-    }
+      
+      // ═══════════════════════════════════════════════════════════════════════
+      // BUILD GUESSES FROM allWordConfidences (don't trust AI's guesses array!)
+      // The AI sometimes picks wrong words even when it evaluated correctly.
+      // ═══════════════════════════════════════════════════════════════════════
+      
+      // Filter to valid unrevealed words only
+      const validBoardWords = board.cards
+        .filter(c => !c.revealed)
+        .map(c => c.word.toUpperCase());
+      
+      // Filter and sort by confidence (only unrevealed words not already guessed this turn)
+      const sortedValidWords = sorted
+        .filter(w => validBoardWords.includes(w.word.toUpperCase()) && !currentGuesses.includes(w.word.toUpperCase()));
+      
+      // Select top words based on clue number (with minimum confidence threshold)
+      const MINIMUM_CONFIDENCE = 10; // Don't guess words below 10%
+      const maxGuesses = clueNumber === -1 || clueNumber === 0 ? sortedValidWords.length : clueNumber + 1; // +1 for leftover rule
+      
+      const selectedFromConfidence = sortedValidWords
+        .filter(w => w.confidence >= MINIMUM_CONFIDENCE)
+        .slice(0, maxGuesses);
+      
+      console.log('');
+      console.log('🎯 [AI GUESSER] ═══ SELECTING GUESSES FROM CONFIDENCE RANKING ═══');
+      console.log(`   Max guesses allowed: ${maxGuesses} (clue: ${clueNumber} + 1 for leftover)`);
+      console.log(`   Minimum confidence: ${MINIMUM_CONFIDENCE}%`);
+      selectedFromConfidence.forEach((w, i) => {
+        console.log(`   ${i + 1}. ${w.word} (${w.confidence}%) - ${w.source === 'stored' ? `from "${w.fromClue}"` : 'current clue'}`);
+      });
+      console.log('🎯 [AI GUESSER] ═══════════════════════════════════════════════════');
+      
+      // ═══════════════════════════════════════════════════════════════════════
+      // AVOIDANCE CLUE (0) HANDLING: ZERO OUT related words, keep unrelated
+      // ═══════════════════════════════════════════════════════════════════════
+      if (isAvoidanceClue) {
+        console.log('');
+        console.log('⚠️ [AVOIDANCE CLUE] ═══ ZEROING OUT RELATED WORDS (PERMANENT) ═══');
+        console.log('   Rule: Words RELATED to avoidance clue get ZEROED PERMANENTLY');
+        console.log('   Rule: Only guess UNRELATED words that have existing confidence from previous rounds');
+        console.log('');
+        
+        const safeToGuess: { word: string; existingConf: number; relatedness: number; fromClue: string }[] = [];
+        const zeroedOut: { word: string; existingConf: number; relatedness: number }[] = [];
+        
+        // Build a map of AI's RAW relatedness assessment for each word
+        // IMPORTANT: Use the AI's ORIGINAL response (allWordConfidences), NOT the merged values!
+        // For avoidance clues, we need "how related is this word to the clue word"
+        const relatednessMap = new Map<string, number>();
+        
+        // Use allWordConfidences (the RAW AI response) not sorted (which is merged)
+        allWordConfidences.forEach(w => {
+          relatednessMap.set(w.word.toUpperCase(), w.confidence);
+        });
+        
+        console.log('   📊 AI\'s RAW relatedness assessments for avoidance clue "' + clue + '":');
+        const relatednessEntries = Array.from(relatednessMap.entries()).sort((a, b) => b[1] - a[1]);
+        relatednessEntries.slice(0, 10).forEach(([word, rel]) => {
+          const bar = '█'.repeat(Math.floor(rel / 10)) + '░'.repeat(10 - Math.floor(rel / 10));
+          console.log(`      ${word.padEnd(15)} ${bar} ${rel}% related to "${clue}"`);
+        });
+        console.log('');
+        
+        // Build updated confidence map for ALL unrevealed words
+        const finalConfidenceMap: { word: string; confidence: number }[] = [];
+        const RELATEDNESS_THRESHOLD = 30; // If 30%+ related to avoidance clue, it's dangerous
+        
+        // Process ALL unrevealed words, not just those in AI response
+        unrevealedWords.forEach(word => {
+          const wordUpper = word.toUpperCase();
+          const relatedness = relatednessMap.get(wordUpper) || 0;
+          const existingData = wordConfidenceMap.get(wordUpper);
+          const existingConf = existingData?.confidence || 0;
+          const fromClue = existingData?.fromClue || '';
+          
+          // If word is RELATED to avoidance clue, mark it dangerous (but don't "zero" permanently)
+          if (relatedness >= RELATEDNESS_THRESHOLD) {
+            zeroedOut.push({ word, existingConf, relatedness });
+            finalConfidenceMap.push({ word: wordUpper, confidence: 0 });
+            console.log(`   ⚠️ ${word.padEnd(15)} DANGEROUS: ${relatedness}% related to "${clue}" (was ${existingConf}%)`);
+          } else if (existingConf > 0) {
+            // SAFE - not related to avoidance clue AND has existing confidence
+            safeToGuess.push({ word, existingConf, relatedness, fromClue });
+            finalConfidenceMap.push({ word: wordUpper, confidence: existingConf });
+            console.log(`   ✅ ${word.padEnd(15)} SAFE: only ${relatedness}% related, keeping ${existingConf}% (from "${fromClue}")`);
+          } else {
+            // No existing confidence and not highly related - keep at 0
+            finalConfidenceMap.push({ word: wordUpper, confidence: 0 });
+            console.log(`   ❓ ${word.padEnd(15)} UNKNOWN: ${relatedness}% related, no existing confidence`);
+          }
+        });
+        
+        console.log('');
+        console.log('⚠️ [AVOIDANCE CLUE] ═══ DECISION ═══');
+        console.log(`   ⛔ PERMANENTLY ZEROED ${zeroedOut.length} word(s): ${zeroedOut.map(w => w.word).join(', ')}`);
+        
+        if (safeToGuess.length > 0) {
+          console.log(`   ✅ Will guess ${safeToGuess.length} SAFE word(s) (sorted by existing confidence):`);
+          safeToGuess.sort((a, b) => b.existingConf - a.existingConf);
+          safeToGuess.forEach((w, i) => {
+            console.log(`      ${i + 1}. ${w.word} (${w.existingConf}% from "${w.fromClue}")`);
+          });
+        } else {
+          console.log('   ❌ No safe words to guess - need more clues first');
+        }
+        
+        // Log the final confidence state that will be saved
+        console.log('');
+        console.log('💾 [AVOIDANCE] ═══ SAVING UPDATED CONFIDENCES FOR FUTURE ROUNDS ═══');
+        finalConfidenceMap
+          .sort((a, b) => b.confidence - a.confidence)
+          .slice(0, 10)
+          .forEach((w, i) => {
+            const marker = w.confidence > 0 ? '✅' : '❓';
+            const bar = '█'.repeat(Math.floor(w.confidence / 10)) + '░'.repeat(10 - Math.floor(w.confidence / 10));
+            console.log(`   ${marker} ${(i + 1).toString().padStart(2)}. ${w.word.padEnd(15)} ${bar} ${w.confidence}%`);
+          });
+        console.log('═══════════════════════════════════════════════════════════════');
+        
+        // Return with ALL word confidences for storage (including zeroed ones)
+        return {
+          guesses: safeToGuess.length > 0 ? safeToGuess.map(w => w.word) : [],
+          reasoning: safeToGuess.length > 0 
+            ? `Avoidance clue "${clue}" - PERMANENTLY ZEROED ${zeroedOut.length} related words (${zeroedOut.map(w => w.word).join(', ')}). Guessing UNRELATED safe words: ${safeToGuess.map(w => `${w.word} (${w.existingConf}% from "${w.fromClue}")`).join(', ')}.`
+            : `Avoidance clue "${clue}" - PERMANENTLY ZEROED ${zeroedOut.length} related words. No safe words with existing confidence to guess.`,
+          allWordConfidences: finalConfidenceMap.map(w => ({ word: w.word, confidence: w.confidence }))
+        };
+      }
     
-    // Extended format: {word, confidence, source, fromClue, turnsAgo}
-    // For "previous" source: confidence is AI's CURRENT assessment, we apply decay
+    // ═══════════════════════════════════════════════════════════════════════
+    // USE CONFIDENCE-BASED GUESSES (built from allWordConfidences above)
+    // This replaces the old logic that trusted AI's guesses array
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    // Extended format for guess details
     interface GuessDetail {
       word: string;
-      confidence: number;           // Final confidence (after decay for previous)
-      rawConfidence: number;        // AI's raw assessment (before decay)
+      confidence: number;
+      rawConfidence: number;
       source: 'current' | 'previous';
       fromClue?: string;
       turnsAgo?: number;
     }
     
-    let guessesWithDetails: GuessDetail[] = [];
+    // Build confidence-based guesses from sorted confidences
+    let guessesWithDetails: GuessDetail[] = selectedFromConfidence.map(w => ({
+      word: w.word.toUpperCase(),
+      confidence: w.confidence,
+      rawConfidence: w.confidence,
+      source: (w.source === 'stored' ? 'previous' : 'current') as 'current' | 'previous',
+      fromClue: w.fromClue,
+      turnsAgo: w.source === 'stored' ? 1 : undefined
+    }));
     
-    if (parsed.guesses && Array.isArray(parsed.guesses)) {
-      if (parsed.guesses.length > 0) {
-        if (typeof parsed.guesses[0] === 'string') {
-          // Old format: string[] - assume all are for current clue
-          guessesWithDetails = (parsed.guesses as unknown as string[]).map((g, i) => ({
-            word: g,
-            confidence: 100 - (i * 10),
-            rawConfidence: 100 - (i * 10),
-            source: 'current' as const
-          }));
+    // ═══════════════════════════════════════════════════════════════════════
+    // CALCULATE "OPEN MISTAKES" - clueNumber minus correct guesses
+    // +1 rule ONLY applies if there are open mistakes to catch up on!
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    let openMistakes = 0;
+    console.log('');
+    console.log('📊 [+1 RULE CHECK] ═══ CALCULATING OPEN MISTAKES ═══');
+    
+    if (teamHistory.length === 0) {
+      console.log('   First turn - no previous history, NO +1 available');
+    } else {
+      teamHistory.forEach((turn, i) => {
+        const expected = turn.clueNumber;
+        if (expected <= 0) return; // Skip avoidance/unlimited clues
+        
+        // Simple: clueNumber - correct guesses = missed words
+        const correctCount = turn.guessResults.filter(r => r.correct).length;
+        const missed = Math.max(0, expected - correctCount);
+        
+        if (missed > 0) {
+          console.log(`   Turn ${i + 1}: "${turn.clue}" for ${expected} → guessed ${correctCount} correct → ${missed} LEFTOVER`);
+          openMistakes += missed;
         } else {
-          // New format - apply decay for previous clue words
-          guessesWithDetails = (parsed.guesses as unknown as {
-            word: string;
-            confidence: number;
-            source?: string;
-            fromClue?: string;
-            turnsAgo?: number;
-          }[]).map(g => {
-            const isPrevious = g.source === 'previous';
-            const turnsAgo = g.turnsAgo || 1;
-            const rawConfidence = g.confidence;
-            
-            // Apply decay: confidence × 0.9^turnsAgo for previous clue words
-            const decayMultiplier = isPrevious ? Math.pow(0.9, turnsAgo) : 1;
-            const decayedConfidence = Math.round(rawConfidence * decayMultiplier);
-            
-            return {
-              word: g.word,
-              confidence: decayedConfidence,
-              rawConfidence: rawConfidence,
-              source: (isPrevious ? 'previous' : 'current') as 'current' | 'previous',
-              fromClue: g.fromClue,
-              turnsAgo: turnsAgo
-            };
-          });
+          console.log(`   Turn ${i + 1}: "${turn.clue}" for ${expected} → guessed ${correctCount} correct → ALL FOUND ✓`);
         }
+      });
+      
+      if (openMistakes > 0) {
+        console.log(`   📢 TOTAL OPEN MISTAKES: ${openMistakes} → +1 IS AVAILABLE!`);
+      } else {
+        console.log(`   ✅ NO OPEN MISTAKES - all previous words found! NO +1 available.`);
       }
     }
+    console.log('📊 [+1 RULE CHECK] ═══════════════════════════════════════');
     
-    // Sort by FINAL confidence (after decay) - descending
-    guessesWithDetails.sort((a, b) => b.confidence - a.confidence);
-    
-    // Separate current clue guesses from leftover guesses
-    const currentClueGuesses = guessesWithDetails.filter(g => g.source === 'current');
-    let leftoverGuesses = guessesWithDetails.filter(g => g.source === 'previous');
-    
-    // Apply decay-based sorting for leftovers and take only the BEST one
-    leftoverGuesses.sort((a, b) => b.confidence - a.confidence);
-    
-    // ENFORCE: Only ONE leftover allowed for +1 rule - take the best one (highest after decay)
-    if (leftoverGuesses.length > 1) {
-      console.log('   ⚠️ AI suggested multiple leftovers, but +1 allows only ONE. Taking highest after decay:');
-      leftoverGuesses.slice(1).forEach(g => {
-        const decayInfo = `${g.rawConfidence}% × 0.9^${g.turnsAgo} = ${g.confidence}%`;
-        console.log(`      ❌ Dropping: ${g.word} (${decayInfo} from "${g.fromClue}")`);
-      });
-      leftoverGuesses = [leftoverGuesses[0]];
-    }
-    
-    console.log('🔍 [AI GUESSER] AI thinking:');
-    console.log('   💭 Reasoning:', parsed.reasoning);
-    
-    if (currentClueGuesses.length > 0) {
-      console.log('   📊 FOR CURRENT CLUE "' + clue + '":');
-      currentClueGuesses.forEach((g, i) => {
-        const bar = '█'.repeat(Math.floor(g.confidence / 10)) + '░'.repeat(10 - Math.floor(g.confidence / 10));
-        console.log(`      ${i + 1}. ${g.word.padEnd(15)} ${bar} ${g.confidence}%`);
-      });
-    }
-    
-    if (leftoverGuesses.length > 0) {
-      console.log('   🔄 LEFTOVER FOR +1 RULE (max 1 allowed):');
-      leftoverGuesses.forEach((g) => {
-        const bar = '█'.repeat(Math.floor(g.confidence / 10)) + '░'.repeat(10 - Math.floor(g.confidence / 10));
-        const decayCalc = `${g.rawConfidence}% × 0.9^${g.turnsAgo || 1} = ${g.confidence}%`;
-        console.log(`      • ${g.word.padEnd(15)} ${bar} ${g.confidence}% (AI said ${g.rawConfidence}%, decay: ${decayCalc})`);
-        if (g.fromClue) console.log(`        └─ from clue "${g.fromClue}" (${g.turnsAgo} turn(s) ago)`);
-      });
-    }
-
-    if (guessesWithDetails.length === 0) {
-      console.log('      (No guesses - AI decided to PASS)');
-    }
-    
-    // Merge back: current clue guesses + at most 1 leftover
-    guessesWithDetails = [...currentClueGuesses, ...leftoverGuesses];
-
     // Filter to only valid unrevealed words
     const validWords = board.cards
       .filter(c => !c.revealed)
@@ -425,27 +659,105 @@ export async function aiGuesser(
         fromClue: g.fromClue,
         turnsAgo: g.turnsAgo
       }));
-
-    // Separate by source for proper limiting
-    const validCurrentClue = validGuesses.filter(g => g.source === 'current');
-    const validLeftover = validGuesses.filter(g => g.source === 'previous').slice(0, 1); // Max 1 leftover
     
-    // Limit current clue guesses based on clue number, then add 1 leftover if available
-    const maxCurrentGuesses = clueNumber === -1 || clueNumber === 0 
-      ? validCurrentClue.length 
-      : Math.min(clueNumber, validCurrentClue.length);
+    // +1 ONLY if there are open mistakes from previous turns!
+    const canUse_PlusOne = openMistakes > 0;
+    const maxGuessesAllowed = clueNumber === -1 || clueNumber === 0 
+      ? validGuesses.length 
+      : canUse_PlusOne ? clueNumber + 1 : clueNumber; // +1 ONLY if open mistakes exist
     
-    const finalCurrentClue = validCurrentClue.slice(0, maxCurrentGuesses);
-    const finalLeftover = validLeftover.length > 0 && (clueNumber === -1 || clueNumber === 0 || finalCurrentClue.length >= clueNumber)
-      ? validLeftover 
-      : []; // Only use +1 if we've guessed enough for current clue
+    const finalGuesses = validGuesses
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, maxGuessesAllowed);
     
-    // Combine: current clue guesses first, then the single leftover (if any)
-    const finalGuesses = [...finalCurrentClue, ...finalLeftover];
+    console.log('🔍 [AI GUESSER] AI thinking:');
+    console.log('   💭 Reasoning:', parsed.reasoning);
+    console.log(`   📊 GUESSES (max ${maxGuessesAllowed} = ${clueNumber} for clue${canUse_PlusOne ? ' + 1 for leftover' : ', NO +1 (no open mistakes)'}):`);
+    finalGuesses.forEach((g, i) => {
+      const bar = '█'.repeat(Math.floor(g.confidence / 10)) + '░'.repeat(10 - Math.floor(g.confidence / 10));
+      const sourceInfo = g.source === 'previous' ? ` ← LEFTOVER from "${g.fromClue}"` : '';
+      const isPlusOne = i >= clueNumber && canUse_PlusOne;
+      const marker = isPlusOne ? '➕' : '🎯';
+      console.log(`      ${marker} ${i + 1}. ${g.word.padEnd(15)} ${bar} ${g.confidence}%${sourceInfo}${isPlusOne ? ' [+1 SLOT]' : ''}`);
+    });
+    
+    if (finalGuesses.length === 0) {
+      console.log('      (No guesses above minimum confidence - PASS)');
+    }
+    
+    // Track which are from current vs previous for logging
+    const finalCurrentClue = finalGuesses.filter(g => g.source === 'current');
+    const finalLeftover = finalGuesses.filter(g => g.source === 'previous');
+    
+    // Build COMPLETE allWordConfidences for persistent storage
+    const aiResponseConfidences = (parsed as unknown as { allWordConfidences?: { word: string; confidence: number }[] }).allWordConfidences || [];
+    const completedConfidenceMap = new Map<string, number>();
+    
+    // Start with AI's response confidences
+    aiResponseConfidences.forEach(w => {
+      completedConfidenceMap.set(w.word.toUpperCase(), w.confidence);
+    });
+    
+    // Add stored confidences for words not in AI response (taking higher of stored vs current)
+    wordConfidenceMap.forEach((data, word) => {
+      if (!completedConfidenceMap.has(word)) {
+        completedConfidenceMap.set(word, data.confidence);
+      } else if (data.confidence > (completedConfidenceMap.get(word) || 0)) {
+        completedConfidenceMap.set(word, data.confidence);
+      }
+    });
+    
+    const finalAllWordConfidences = Array.from(completedConfidenceMap.entries()).map(([word, confidence]) => ({
+      word,
+      confidence
+    }));
+    
+    // Log the complete confidence map being saved
+    console.log('');
+    console.log('💾 [SAVING] ═══ CONFIDENCE MAP FOR FUTURE ROUNDS ═══');
+    const sortedForSave = [...finalAllWordConfidences].sort((a, b) => b.confidence - a.confidence);
+    sortedForSave.slice(0, 10).forEach((w, i) => {
+      const marker = w.confidence >= 50 ? '✅' : (w.confidence > 0 ? '⚠️' : '❓');
+      const bar = '█'.repeat(Math.floor(w.confidence / 10)) + '░'.repeat(10 - Math.floor(w.confidence / 10));
+      console.log(`   ${marker} ${(i + 1).toString().padStart(2)}. ${w.word.padEnd(15)} ${bar} ${w.confidence}%`);
+    });
+    if (sortedForSave.length > 10) {
+      console.log(`   ... and ${sortedForSave.length - 10} more words`);
+    }
+    console.log('💾 [SAVING] ═══════════════════════════════════════════');
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // BUILD ACCURATE REASONING based on what we ACTUALLY chose
+    // ═══════════════════════════════════════════════════════════════════════
+    const currentClueGuessesForReasoning = finalGuesses.filter(g => g.source === 'current');
+    const leftoverGuessesForReasoning = finalGuesses.filter(g => g.source === 'previous');
+    
+    let accurateReasoning = '';
+    
+    // Explain current clue guesses
+    if (currentClueGuessesForReasoning.length > 0) {
+      const guessDescriptions = currentClueGuessesForReasoning.map(g => 
+        `'${g.word}' (${g.confidence}% confidence)`
+      ).join(', ');
+      accurateReasoning += `For the clue '${clue}', I chose ${guessDescriptions}. `;
+    }
+    
+    // Explain +1 usage
+    if (leftoverGuessesForReasoning.length > 0) {
+      const leftover = leftoverGuessesForReasoning[0];
+      accurateReasoning += `I also used the +1 rule to guess '${leftover.word}' (${leftover.confidence}% confidence) which was a leftover from the previous clue '${leftover.fromClue}'.`;
+    } else if (canUse_PlusOne) {
+      accurateReasoning += `The +1 rule was available (${openMistakes} open mistake${openMistakes > 1 ? 's' : ''} from previous turns), but no leftover word had high enough confidence to use it.`;
+    } else if (teamHistory.length === 0) {
+      accurateReasoning += `This is the first turn, so the +1 rule is not available yet.`;
+    } else {
+      accurateReasoning += `All previous intended words have been found, so the +1 rule is not available.`;
+    }
     
     const result = {
       guesses: finalGuesses.map(g => g.word),
-      reasoning: parsed.reasoning,
+      reasoning: accurateReasoning,
+      allWordConfidences: finalAllWordConfidences, // Complete map for persistent tracking
     };
 
     console.log('✅ [AI GUESSER] FINAL DECISION:');
@@ -482,6 +794,12 @@ export async function aiGuesser(
     console.log('═══════════════════════════════════════════════════════════');
 
     return result;
+    }
+    
+    // AI MUST return allWordConfidences - if it didn't, throw error to retry
+    console.error('❌ [AI GUESSER] AI did not return allWordConfidences! This should not happen.');
+    console.error('   Parsed response:', JSON.stringify(parsed, null, 2));
+    throw new Error('AI guesser did not return allWordConfidences - required for tracking');
   } catch (error) {
     console.error('❌ [AI GUESSER] Error:', error);
     throw error; // Let the caller handle it
@@ -497,6 +815,8 @@ export interface RivalTurnResult {
   number: number;
   guesses: string[];
   reasoning?: string;
+  intendedTargets?: string[];
+  guesserWordConfidences?: { word: string; confidence: number }[];
 }
 
 /**
@@ -584,7 +904,96 @@ export async function rivalTurn(
   console.log('   📢 Clue: "' + clue + '" for ' + number + ' words');
   console.log('   💭 Reasoning:', clueReasoning);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // RIVAL GUESSER: BUILD PERSISTENT CONFIDENCE MAP (same logic as partner)
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('👿 [RIVAL CONFIDENCE] ═══ BUILDING RIVAL\'S CONFIDENCE MAP ═══');
+  
+  const unrevealedWords = board.cards.filter(c => !c.revealed).map(c => c.word);
+  const rivalTeamHistory = turnHistory.filter(t => t.team === team);
+  const userTeamHistory = turnHistory.filter(t => t.team !== team);
+  const rivalCurrentTurn = rivalTeamHistory.length + 1;
+  
+  // Initialize confidence map for rival
+  const rivalConfidenceMap: Map<string, {
+    confidence: number;
+    fromClue: string;
+    fromTurn: number;
+    isZeroedByOpponent: boolean;
+  }> = new Map();
+  
+  unrevealedWords.forEach(word => {
+    rivalConfidenceMap.set(word.toUpperCase(), {
+      confidence: 0,
+      fromClue: '',
+      fromTurn: 0,
+      isZeroedByOpponent: false
+    });
+  });
+  
+  // Process RIVAL's previous turns
+  console.log('👿 [RIVAL CONFIDENCE] Processing rival\'s turn history:');
+  for (let i = 0; i < rivalTeamHistory.length; i++) {
+    const turn = rivalTeamHistory[i];
+    const turnNumber = i + 1;
+    const turnsAgo = rivalCurrentTurn - turnNumber;
+    const decayMultiplier = Math.pow(0.9, turnsAgo);
+    
+    console.log(`   Turn ${turnNumber}: Clue "${turn.clue}" - ${turnsAgo} turn(s) ago, decay: ${(decayMultiplier * 100).toFixed(0)}%`);
+    
+    if (turn.guesserWordConfidences && turn.guesserWordConfidences.length > 0) {
+      turn.guesserWordConfidences.forEach(wc => {
+        const wordUpper = wc.word.toUpperCase();
+        if (!unrevealedWords.map(w => w.toUpperCase()).includes(wordUpper)) return;
+        
+        const decayedConfidence = Math.round(wc.confidence * decayMultiplier);
+        const existing = rivalConfidenceMap.get(wordUpper);
+        if (!existing || decayedConfidence > existing.confidence) {
+          rivalConfidenceMap.set(wordUpper, {
+            confidence: decayedConfidence,
+            fromClue: turn.clue,
+            fromTurn: turnNumber,
+            isZeroedByOpponent: false
+          });
+        }
+      });
+    }
+  }
+  
+  // Process USER's turns - zero out words that match user's clues
+  console.log('👿 [RIVAL CONFIDENCE] Processing opponent (user) turns:');
+  userTeamHistory.forEach(userTurn => {
+    if (userTurn.intendedTargets) {
+      userTurn.intendedTargets.forEach(targetWord => {
+        const wordUpper = targetWord.toUpperCase();
+        if (rivalConfidenceMap.has(wordUpper)) {
+          const existing = rivalConfidenceMap.get(wordUpper)!;
+          console.log(`   ⚠️ "${targetWord}" was user's target for "${userTurn.clue}" - ZEROING`);
+          rivalConfidenceMap.set(wordUpper, {
+            ...existing,
+            confidence: 0,
+            isZeroedByOpponent: true
+          });
+        }
+      });
+    }
+  });
+  
+  // Log rival's confidence state
+  console.log('');
+  console.log('👿 [RIVAL CONFIDENCE] ═══ RIVAL\'S CONFIDENCE STATE ═══');
+  const sortedRivalConf = Array.from(rivalConfidenceMap.entries())
+    .sort((a, b) => b[1].confidence - a[1].confidence);
+  sortedRivalConf.slice(0, 10).forEach(([word, data], i) => {
+    const bar = '█'.repeat(Math.floor(data.confidence / 10)) + '░'.repeat(10 - Math.floor(data.confidence / 10));
+    const source = data.fromClue ? ` (from "${data.fromClue}")` : '';
+    console.log(`   ${(i + 1).toString().padStart(2)}. ${word.padEnd(15)} ${bar} ${data.confidence}%${source}`);
+  });
+  console.log('👿 [RIVAL CONFIDENCE] ═══════════════════════════════════');
+
   // Step 2: Generate guesses based on the clue
+  console.log('');
   console.log('👿 [RIVAL TURN] Step 2: Rival guesser interpreting clue...');
   const guesserSystemPrompt = buildRivalGuesserSystemPrompt(team);
   const guesserUserPrompt = buildGuesserUserPrompt(
@@ -604,70 +1013,124 @@ export async function rivalTurn(
   console.log('👿 [RIVAL TURN] Guesser raw response:', guessResponse);
   const guessData = parseAgentJson<AgentGuesserResponse>(guessResponse);
 
-  // Handle both old format (string[]) and new format ({word, confidence}[])
-  let rivalGuessesWithConfidence: { word: string; confidence: number }[] = [];
+  // ═══════════════════════════════════════════════════════════════════════
+  // BUILD GUESSES PURELY FROM allWordConfidences (by semantic confidence)
+  // The guesser doesn't know categories - it picks based on clue relevance ONLY
+  // ═══════════════════════════════════════════════════════════════════════
   
-  if (guessData.guesses && Array.isArray(guessData.guesses)) {
-    if (guessData.guesses.length > 0) {
-      if (typeof guessData.guesses[0] === 'string') {
-        // Old format: string[]
-        rivalGuessesWithConfidence = (guessData.guesses as unknown as string[]).map((g, i) => ({
-          word: g,
-          confidence: 100 - (i * 10)
-        }));
-      } else {
-        // New format: {word, confidence}[]
-        rivalGuessesWithConfidence = guessData.guesses as unknown as { word: string; confidence: number }[];
-      }
-    }
-  }
+  const allWordConfidences = (guessData as unknown as { allWordConfidences?: { word: string; confidence: number }[] }).allWordConfidences || [];
   
-  // Sort by confidence (descending)
-  rivalGuessesWithConfidence.sort((a, b) => b.confidence - a.confidence);
+  console.log('');
+  console.log('👿 [RIVAL TURN] 📊 AI WORD CONFIDENCES (semantic match to clue):');
   
-  console.log('👿 [RIVAL TURN] 📊 CONFIDENCE SCORES (descending):');
-  rivalGuessesWithConfidence.forEach((g, i) => {
-    const bar = '█'.repeat(Math.floor(g.confidence / 10)) + '░'.repeat(10 - Math.floor(g.confidence / 10));
-    console.log(`      ${i + 1}. ${g.word.padEnd(15)} ${bar} ${g.confidence}%`);
-  });
-
-  // Filter to valid (unrevealed) words only
+  // Get valid unrevealed words
   const validWords = board.cards
     .filter(c => !c.revealed)
     .map(c => c.word.toUpperCase());
   
-  const revealedWords = board.cards
-    .filter(c => c.revealed)
-    .map(c => c.word.toUpperCase());
-
-  // Check if AI tried to guess already-revealed words (bug detection)
-  const invalidGuesses = rivalGuessesWithConfidence
-    .filter(g => revealedWords.includes(g.word.toUpperCase().trim()));
+  // Build confidence map from AI's allWordConfidences
+  const confidenceByWord = new Map<string, number>();
+  allWordConfidences.forEach(wc => {
+    confidenceByWord.set(wc.word.toUpperCase(), wc.confidence);
+  });
   
-  if (invalidGuesses.length > 0) {
-    console.warn('⚠️ [RIVAL TURN] BUG DETECTED: AI tried to guess already-revealed words!');
-    invalidGuesses.forEach(g => {
-      console.warn(`   ❌ "${g.word}" is already revealed - FILTERED OUT`);
+  // Merge with stored confidences (take higher)
+  rivalConfidenceMap.forEach((data, word) => {
+    const currentConf = confidenceByWord.get(word) || 0;
+    if (data.confidence > currentConf && !data.isZeroedByOpponent) {
+      console.log(`   🔄 ${word}: stored ${data.confidence}% > current ${currentConf}% → USING STORED`);
+      confidenceByWord.set(word, data.confidence);
+    }
+  });
+  
+  // Sort all words by confidence descending
+  const sortedByConfidence = Array.from(confidenceByWord.entries())
+    .filter(([word]) => validWords.includes(word))
+    .sort((a, b) => b[1] - a[1]);
+  
+  sortedByConfidence.forEach(([word, conf], i) => {
+    const bar = '█'.repeat(Math.floor(conf / 10)) + '░'.repeat(10 - Math.floor(conf / 10));
+    console.log(`      ${i + 1}. ${word.padEnd(15)} ${bar} ${conf}%`);
+  });
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // +1 RULE CHECK: Only allow +1 if there are "open mistakes" from previous turns
+  // Open mistake = clueNumber - correct guesses (simple count)
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log('');
+  console.log('👿 [+1 RULE CHECK] ═══ CALCULATING RIVAL\'S OPEN MISTAKES ═══');
+  
+  let rivalOpenMistakes = 0;
+  const rivalTeamHistoryForPlusOne = turnHistory.filter(t => t.team === team);
+  
+  if (rivalTeamHistoryForPlusOne.length === 0) {
+    console.log('   First turn for rival - NO +1 available');
+  } else {
+    rivalTeamHistoryForPlusOne.forEach((turn, i) => {
+      const expected = turn.clueNumber;
+      if (expected <= 0) return; // Skip avoidance/unlimited clues
+      
+      // Simple: clueNumber - correct guesses = missed words
+      const correctCount = turn.guessResults.filter(r => r.correct).length;
+      const missed = Math.max(0, expected - correctCount);
+      
+      if (missed > 0) {
+        console.log(`   Turn ${i + 1}: "${turn.clue}" for ${expected} → guessed ${correctCount} correct → ${missed} LEFTOVER`);
+        rivalOpenMistakes += missed;
+      } else {
+        console.log(`   Turn ${i + 1}: "${turn.clue}" for ${expected} → guessed ${correctCount} correct → ALL FOUND ✓`);
+      }
     });
+    
+    if (rivalOpenMistakes > 0) {
+      console.log(`   📢 TOTAL OPEN MISTAKES: ${rivalOpenMistakes} → +1 IS AVAILABLE!`);
+    } else {
+      console.log(`   ✅ NO OPEN MISTAKES - all previous words found! NO +1 available.`);
+    }
   }
+  console.log('👿 [+1 RULE CHECK] ═══════════════════════════════════════════');
+  
+  // Pick top N words by confidence - +1 ONLY if there are open mistakes!
+  const MINIMUM_CONFIDENCE = 10;
+  const rivalCanUsePlusOne = rivalOpenMistakes > 0;
+  const maxRivalGuesses = rivalCanUsePlusOne ? number + 1 : number;
+  
+  const validGuesses = sortedByConfidence
+    .filter(([, conf]) => conf >= MINIMUM_CONFIDENCE)
+    .slice(0, maxRivalGuesses)
+    .map(([word]) => word);
+  
+  console.log('');
+  console.log(`👿 [RIVAL TURN] 🎯 GUESSING TOP ${maxRivalGuesses} WORDS (${number} for clue${rivalCanUsePlusOne ? ' + 1 for leftover' : ', NO +1'}):`);
+  validGuesses.forEach((word, i) => {
+    const conf = confidenceByWord.get(word) || 0;
+    const isPlusOne = i >= number && rivalCanUsePlusOne;
+    const marker = isPlusOne ? '➕' : '🎯';
+    console.log(`      ${marker} ${i + 1}. ${word} (${conf}%)${isPlusOne ? ' [+1 SLOT]' : ''}`);
+  });
 
-  const validGuesses = rivalGuessesWithConfidence
-    .filter(g => validWords.includes(g.word.toUpperCase().trim()))
-    .map(g => g.word.toUpperCase().trim());
+  // Create final word confidences array
+  const finalWordConfidences: { word: string; confidence: number }[] = [];
+  confidenceByWord.forEach((confidence, word) => {
+    finalWordConfidences.push({ word, confidence });
+  });
 
-  const result = {
+  // Get intended targets from the spymaster response
+  const intendedTargets = rivalWords.slice(0, number); // Best guess at intended targets
+
+  const result: RivalTurnResult = {
     clue,
     number,
-    guesses: validGuesses.slice(0, number + 1),
+    guesses: validGuesses,
     reasoning: clueReasoning,
+    intendedTargets,
+    guesserWordConfidences: finalWordConfidences,
   };
 
   console.log('✅ [RIVAL TURN] FINAL RIVAL DECISION:');
   console.log('   📢 Clue: "' + result.clue + '" for ' + result.number);
   console.log('   🎯 Will guess:', result.guesses.join(' → '));
-  if (invalidGuesses.length > 0) {
-    console.log('   ⚠️ Filtered out ' + invalidGuesses.length + ' already-revealed word(s)');
-  }
+  console.log('   📊 Confidences tracked:', finalWordConfidences.length, 'words');
   console.log('═══════════════════════════════════════════════════════════');
   return result;
 }
@@ -693,61 +1156,137 @@ export async function validateClueWithAI(
     return { valid: false, reason: 'Clue must be a single word (no spaces)' };
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // PROGRAMMATIC PRE-CHECK: Check all rules before calling AI
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  const clueUpper = clue.toUpperCase();
+  const suffixes = ['S', 'ES', 'ED', 'ING', 'ER', 'LY', 'TION', 'NESS', 'MENT', 'ABLE', 'IBLE'];
+  
+  // Extract root of clue by removing common suffixes
+  let clueRoot = clueUpper;
+  for (const suf of suffixes) {
+    if (clueRoot.endsWith(suf) && clueRoot.length > suf.length + 2) {
+      clueRoot = clueRoot.slice(0, -suf.length);
+      break;
+    }
+  }
+  
+  console.log('✔️ [AI VALIDATOR] Clue root:', clueRoot);
+  
+  for (const word of boardWords) {
+    const wordUpper = word.toUpperCase();
+    
+    // Extract root of board word
+    let wordRoot = wordUpper;
+    for (const suf of suffixes) {
+      if (wordRoot.endsWith(suf) && wordRoot.length > suf.length + 2) {
+        wordRoot = wordRoot.slice(0, -suf.length);
+        break;
+      }
+    }
+    
+    // RULE 1: Exact match
+    if (clueUpper === wordUpper) {
+      console.log(`❌ [PRE-CHECK] INVALID - "${clue}" exactly matches board word "${word}"`);
+      return { valid: false, reason: `Your clue "${clue}" is exactly the same as the board word "${word}". Try a different word.` };
+    }
+    
+    // RULE 2: Clue contains board word
+    if (clueUpper.length > wordUpper.length && clueUpper.includes(wordUpper)) {
+      console.log(`❌ [PRE-CHECK] INVALID - "${clue}" contains board word "${word}"`);
+      return { valid: false, reason: `Your clue "${clue}" contains the board word "${word}". Try a different word.` };
+    }
+    
+    // RULE 3: Board word contains clue
+    if (wordUpper.length > clueUpper.length && wordUpper.includes(clueUpper)) {
+      console.log(`❌ [PRE-CHECK] INVALID - Board word "${word}" contains your clue "${clue}"`);
+      return { valid: false, reason: `The board word "${word}" contains your clue "${clue}". Try a different word.` };
+    }
+    
+    // RULE 4: Suffix forms (clue + suffix = word OR word + suffix = clue)
+    for (const suf of suffixes) {
+      if (clueUpper === wordUpper + suf || wordUpper === clueUpper + suf) {
+        console.log(`❌ [PRE-CHECK] INVALID - "${clue}" is just "${word}" with suffix "${suf}"`);
+        return { valid: false, reason: `Your clue "${clue}" is just "${word}" with a suffix. Try a completely different word.` };
+      }
+    }
+    
+    // RULE 5: SHARED ROOT - This catches HEROES/SUPERHERO!
+    // Check if clue root appears in board word OR board word root appears in clue
+    if (clueRoot.length >= 3 && wordUpper.includes(clueRoot)) {
+      console.log(`❌ [PRE-CHECK] INVALID - "${clue}" (root: "${clueRoot}") shares root with "${word}"`);
+      return { valid: false, reason: `Your clue "${clue}" shares the root "${clueRoot}" with board word "${word}". Try a different word.` };
+    }
+    if (wordRoot.length >= 3 && clueUpper.includes(wordRoot)) {
+      console.log(`❌ [PRE-CHECK] INVALID - "${clue}" contains the root "${wordRoot}" from board word "${word}"`);
+      return { valid: false, reason: `Your clue "${clue}" contains the root "${wordRoot}" from board word "${word}". Try a different word.` };
+    }
+  }
+  
+  console.log('✔️ [PRE-CHECK] All programmatic checks passed, calling AI for final validation...');
+
   try {
     // Build a very explicit prompt that checks each word against each rule
-    const systemPrompt = `You are a Codenames clue validator. You must check EXACT STRING PATTERNS ONLY.
+    const systemPrompt = `You are a strict Codenames clue validator. Check ALL rules for ALL board words.
 
-YOUR ONLY JOB: Check if the clue violates ANY of these 5 rules with ANY board word.
+## RULES (if ANY fails for ANY word → INVALID):
 
-RULE 1 - EXACT MATCH: Is clue spelled EXACTLY the same as a board word?
-RULE 2 - CLUE CONTAINS WORD: Does the clue contain a board word as consecutive letters?
-  Example: "BEARTRAP" contains "BEAR" → INVALID
-  Example: "SUNLIGHT" contains "SUN" → INVALID
-RULE 3 - WORD CONTAINS CLUE: Does any board word contain the clue as consecutive letters?
-  Example: Board has "SUNFLOWER", clue is "SUN" → INVALID
-  Example: Board has "FIREPLACE", clue is "FIRE" → INVALID
-RULE 4 - SUFFIX FORMS: Is clue = word + (S/ES/ED/ING/ER) or word = clue + (S/ES/ED/ING/ER)?
-  Example: clue "RUNS" and word "RUN" → INVALID
-  Example: clue "RUN" and word "RUNNING" → INVALID
-RULE 5 - ABBREVIATIONS/ACRONYMS: Is the clue an abbreviation of a board word, or vice versa?
-  Example: clue "NYC" and word "NEW YORK" → INVALID (NYC = New York City)
-  Example: clue "USA" and word "AMERICA" → INVALID (USA = United States of America)
-  Example: clue "UK" and word "ENGLAND" → INVALID (UK = United Kingdom, England is part of UK)
-  Example: clue "LA" and word "LOS ANGELES" → INVALID
-  Example: clue "TV" and word "TELEVISION" → INVALID
-  Example: clue "AMERICA" and word "USA" → INVALID (expansion of abbreviation)
+☐ RULE 1 - EXACT MATCH: Clue = board word (identical spelling)
+☐ RULE 2 - CLUE CONTAINS WORD: Clue has board word as substring
+   "BEARTRAP" contains "BEAR" → INVALID
+☐ RULE 3 - WORD CONTAINS CLUE: Board word has clue as substring  
+   "SUNFLOWER" contains "SUN" → INVALID
+☐ RULE 4 - SUFFIX FORMS: Clue is word ± (S/ES/ED/ING/ER/LY)
+   "RUNS" and "RUN" → INVALID
+☐ RULE 5 - SHARED ROOT: Clue and word share a common root
+   "HEROES" and "SUPERHERO" both contain "HERO" → INVALID
+   "PLAYING" and "PLAYER" both contain "PLAY" → INVALID
+☐ RULE 6 - ABBREVIATIONS: Clue abbreviates word or vice versa
+   "NYC" and "NEW YORK" → INVALID
 
-**CRITICAL - WHAT IS VALID:**
-- Different words with NO letter overlap = VALID
-- LIPS and MOUTH = completely different strings = VALID
-- THEATER and SCREEN = completely different strings = VALID  
-- BREATHE and MOUTH = completely different strings = VALID
-- Synonyms = VALID (that's the game!)
+## VALID (these are OK):
+- Synonyms: THEATER/SCREEN, LIPS/MOUTH = VALID (different strings!)
 - Related concepts = VALID (that's the game!)
+- Semantic connections = VALID
 
-Return JSON: {"valid": true/false, "reason": "explanation"}`;
+Return JSON: {"valid": true/false, "reason": "user-friendly explanation"}`;
 
-    // Build explicit word-by-word check
-    const wordChecks = boardWords.map(word => 
-      `"${clue}" vs "${word}": exact match? contains? contained? suffix form? abbreviation?`
-    ).join('\n');
+    // Build explicit checklist for each word
+    const wordChecklist = boardWords.map((word, i) => {
+      const wordUpper = word.toUpperCase();
+      let wordRoot = wordUpper;
+      for (const s of suffixes) {
+        if (wordRoot.endsWith(s) && wordRoot.length > s.length + 2) {
+          wordRoot = wordRoot.slice(0, -s.length);
+          break;
+        }
+      }
+      return `
+## Word ${i + 1}: "${word}" (root: "${wordRoot}")
+☐ Is "${clueUpper}" exactly "${wordUpper}"?
+☐ Does "${clueUpper}" contain "${wordUpper}"?
+☐ Does "${wordUpper}" contain "${clueUpper}"?
+☐ Is "${clueUpper}" = "${wordUpper}" + suffix (or vice versa)?
+☐ Do they share a root? (clue root: "${clueRoot}", word root: "${wordRoot}")
+☐ Is "${clue}" an abbreviation of "${word}" (or vice versa)?`;
+    }).join('\n');
 
-    const userPrompt = `CLUE: "${clue}"
+    const userPrompt = `## VALIDATE THIS CLUE
 
-CHECK EACH BOARD WORD:
-${wordChecks}
+**Clue:** "${clue}" (uppercase: "${clueUpper}", root: "${clueRoot}")
 
-For EACH word above, answer:
-1. Is "${clue}" spelled exactly as this word? (letter by letter)
-2. Does "${clue}" contain this word as letters inside it?
-3. Does this word contain "${clue}" as letters inside it?
-4. Is one the other + s/es/ed/ing/er?
-5. Is "${clue}" an abbreviation/acronym of this word? (e.g., NYC for NEW YORK, TV for TELEVISION)
+**Check against each board word:**
+${wordChecklist}
 
-If ANY answer is YES for ANY word → {"valid": false, "reason": "word X violates rule Y"}
-If ALL answers are NO for ALL words → {"valid": true, "reason": "no violations"}
+## RESPOND:
+If ANY checkbox is YES for ANY word → {"valid": false, "reason": "user-friendly explanation"}
+If ALL checkboxes are NO for ALL words → {"valid": true, "reason": "All rules pass"}
 
-Remember: Different words like LIPS/MOUTH, THEATER/SCREEN are VALID!
+Give helpful, friendly error messages like:
+- "Your clue 'HEROES' shares the root 'HERO' with 'SUPERHERO'. Try a different word."
+- "Your clue 'NYC' is an abbreviation of 'NEW YORK'. Try a different word."
+
 JSON response:`;
 
     const response = await callAgent(systemPrompt, userPrompt, {
@@ -823,4 +1362,3 @@ export const aiGuesserStub = async (
   return aiGuesser(clue, clueNumber, board, team, profile, turnHistory || []);
 };
 export const rivalTurnStub = rivalTurn;
-

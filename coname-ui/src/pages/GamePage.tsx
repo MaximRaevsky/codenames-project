@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Home, Settings, Loader2, BarChart3 } from 'lucide-react';
+import { Home, Settings, Loader2, BarChart3, Bug } from 'lucide-react';
 import { useAppState } from '../hooks/useGameState';
 import { GameBoard } from '../components/GameBoard';
 import { SidePanel } from '../components/SidePanel';
@@ -11,6 +11,7 @@ import { GameOverModal } from '../components/GameOverModal';
 import { CountdownTimer } from '../components/CountdownTimer';
 import { RulesTooltip } from '../components/RulesTooltip';
 import { Logo } from '../components/Logo';
+import { DebugConfidencePanel } from '../components/DebugConfidencePanel';
 import { extractGameSessionData } from '../utils/userDatabase';
 import { updateSummaryAfterGame } from '../utils/summaryAgent';
 
@@ -42,6 +43,7 @@ export function GamePage() {
   const [gameOverModalDismissed, setGameOverModalDismissed] = useState(false);
   const [surveyPending, setSurveyPending] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<'home' | 'newGame' | null>(null);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
   const endTurnTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasTimerExpired = useRef(false);
   const gameCancelledRef = useRef(false); // Flag to stop AI processes
@@ -367,6 +369,20 @@ export function GamePage() {
               {/* Game Rules Tooltip */}
               <RulesTooltip position="bottom" />
 
+              {/* Debug Panel Toggle */}
+              <button
+                onClick={() => setShowDebugPanel(!showDebugPanel)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-colors ${
+                  showDebugPanel 
+                    ? 'bg-green-500 text-white' 
+                    : 'bg-gray-800 hover:bg-gray-700 text-green-400'
+                }`}
+                title="Toggle Debug Confidence Panel"
+              >
+                <Bug className="w-4 h-4" />
+                <span className="hidden sm:inline text-sm font-medium font-mono">Debug</span>
+              </button>
+
               {/* Edit Profile */}
               <button
                 onClick={() => setCurrentPage('profile')}
@@ -552,6 +568,16 @@ export function GamePage() {
             onNewGame={startNewGame}
           />
         </div>
+
+        {/* Debug Confidence Panel */}
+        {showDebugPanel && (
+          <div className="mt-6">
+            <DebugConfidencePanel
+              game={game}
+              userTeam={settings.playerTeam === 'red' ? 'teamA' : 'teamB'}
+            />
+          </div>
+        )}
       </main>
 
       {/* Game Over Modal - shows immediately with X button */}

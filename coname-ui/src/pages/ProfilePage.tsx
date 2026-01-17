@@ -5,7 +5,7 @@ import { User, ChevronRight, ChevronLeft, Check, Edit3, Users as UsersIcon, Brai
 import { useAppState } from '../hooks/useGameState';
 import { UserProfile } from '../types/game';
 import { Logo } from '../components/Logo';
-import { getUser, SummaryHistoryEntry } from '../utils/userDatabase';
+import { getUser } from '../utils/userDatabase';
 
 // ============================================
 // CONSTANTS

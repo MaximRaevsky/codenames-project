@@ -70,20 +70,58 @@ export function validateClue(
     };
   }
 
-  // Check for partial matches (warning only - not invalid)
-  // TODO: Replace with semantic similarity check using embeddings
+  // Check for partial matches - INVALID if clue contains or is contained in a board word
   const partialMatch = boardWords.find(card => {
     const wordUpper = card.word.toUpperCase();
-    return (
-      wordUpper.includes(clueUpper) || 
-      clueUpper.includes(wordUpper)
-    );
+    // Check if one contains the other (and they're different words)
+    if (wordUpper !== clueUpper) {
+      if (wordUpper.includes(clueUpper) && clueUpper.length >= 3) {
+        return true; // Board word contains the clue (e.g., SCIENCE on board, clue is SCI)
+      }
+      if (clueUpper.includes(wordUpper) && wordUpper.length >= 3) {
+        return true; // Clue contains board word (e.g., SCIENTIST as clue, SCIENCE on board)
+      }
+    }
+    return false;
   });
 
-  if (partialMatch && partialMatch.word.toUpperCase() !== clueUpper) {
+  if (partialMatch) {
+    const wordUpper = partialMatch.word.toUpperCase();
+    if (clueUpper.includes(wordUpper)) {
+      return {
+        valid: false,
+        reason: `Your clue "${trimmedClue}" contains the board word "${partialMatch.word}". Try a different word that doesn't include any board word inside it.`,
+      };
+    } else {
+      return {
+        valid: false,
+        reason: `The board word "${partialMatch.word}" contains your clue "${trimmedClue}". Try a different word.`,
+      };
+    }
+  }
+  
+  // Check for suffix/root forms (e.g., RUN/RUNNING, SCIENCE/SCIENTIST)
+  const suffixes = ['S', 'ES', 'ED', 'ING', 'ER', 'EST', 'LY', 'TION', 'IST', 'ISM', 'MENT', 'NESS', 'ABLE', 'IBLE', 'FUL', 'LESS'];
+  const suffixMatch = boardWords.find(card => {
+    const wordUpper = card.word.toUpperCase();
+    if (wordUpper === clueUpper) return false;
+    
+    for (const suf of suffixes) {
+      // Clue is word + suffix (e.g., clue RUNS, word RUN)
+      if (clueUpper === wordUpper + suf) return true;
+      // Word is clue + suffix (e.g., clue RUN, word RUNNING)
+      if (wordUpper === clueUpper + suf) return true;
+      // Remove suffix and compare roots
+      if (clueUpper.endsWith(suf) && clueUpper.slice(0, -suf.length) === wordUpper) return true;
+      if (wordUpper.endsWith(suf) && wordUpper.slice(0, -suf.length) === clueUpper) return true;
+    }
+    return false;
+  });
+
+  if (suffixMatch) {
     return {
-      valid: true,
-      reason: `Warning: "${trimmedClue}" contains or is contained in "${partialMatch.word}". This is allowed but may be too obvious.`,
+      valid: false,
+      reason: `Your clue "${trimmedClue}" is too similar to "${suffixMatch.word}" on the board (they share the same root). Try a completely different word.`,
     };
   }
 

@@ -219,23 +219,29 @@ When the Spymaster gives "0", they are WARNING you about DANGEROUS words!
 - No limit on guesses - guess as many as you're confident about
 - Still STOP when you become uncertain - don't guess randomly!
 
-## 🧠 RISK MANAGEMENT - KEY STRATEGY
+## 🧠 GUESSING STRATEGY - PURE SEMANTIC MATCHING
 
-**You are NOT obligated to guess all the words!** This is critical:
-- The number tells you how many words COULD connect to the clue
-- But YOU decide how many to actually guess based on confidence
-- If you're 30% sure about 2 words but only 10% sure about a 3rd, STOP at 2
-- A wrong guess can lose the game (assassin) or help the opponent
+**CRITICAL: You do NOT know which words belong to which team!**
+- You ONLY know the clue word and the available words
+- Guess based PURELY on how well each word connects semantically to the clue
+- DO NOT try to "figure out" or "infer" which words are yours vs opponent's vs neutral
+- Your spymaster gave you a clue - trust it and find the words that BEST MATCH the clue
 
-**Risk Assessment for Each Guess:**
-- High confidence (>30%) → Guess it
-- Medium confidence (10-30%) → Consider score: if behind, maybe risk it; if ahead, skip it
-- Low confidence (<10%) → SKIP IT, not worth the risk
+**How to decide what to guess:**
+1. Rate each word by how semantically related it is to the clue
+2. Guess the words with the HIGHEST semantic connection to the clue
+3. Guess up to (clue number) words, stopping if confidence drops too low
 
-**When to PASS (return empty guesses):**
-- If you're uncertain about ALL options and don't want to risk the assassin
-- This ends your turn and gives the opponent a chance to play
-- Only pass if truly uncertain - passing is still better than hitting the assassin!
+**Confidence = Semantic Relatedness:**
+- 50%+ → Strong connection to the clue, definitely guess it
+- 30-50% → Moderate connection, probably guess it
+- 10-30% → Weak connection, risky but consider it
+- <10% → Very weak connection, skip it
+
+**DO NOT:**
+- Try to guess which words are "team words" vs "neutral" vs "rival"
+- Filter words based on anything OTHER than their semantic connection to the clue
+- You have NO INFORMATION about word categories - only the clue!
 
 ## DANGER PRIORITY (Most to Least Dangerous):
 1. 🚫 **ASSASSIN** - If there's ANY chance a word is the assassin, DO NOT GUESS IT
@@ -276,24 +282,31 @@ PRIORITY ORDER:
 - Consider the score: behind = slightly more risk acceptable, ahead = play safe
 - Look at YOUR TEAM's previous clues - are there words you should have guessed?
 
-## Response Format
+## Response Format (ALL FIELDS REQUIRED!)
 {
   "allWordConfidences": [
     {"word": "WORD1", "confidence": 95},
     {"word": "WORD2", "confidence": 70},
     {"word": "WORD3", "confidence": 15},
-    ...for ALL available words
+    ...MUST include ALL available words on the board!
   ],
   "guesses": [
     {"word": "WORD1", "confidence": 95, "source": "current"},
-    {"word": "WORD2", "confidence": 70, "source": "current"},
-    {"word": "LEFTOVER", "confidence": 65, "source": "previous", "fromClue": "OLD_CLUE", "turnsAgo": 2}
+    {"word": "WORD2", "confidence": 70, "source": "current"}
   ],
   "reasoning": "Why these words connect to the clue"
 }
 
+⚠️ CRITICAL - "allWordConfidences" IS MANDATORY!
+You MUST rate EVERY SINGLE available word from 0-100. This is required for the game to function.
+Do NOT skip any words. Include ALL words even if confidence is 0%.
+
 IMPORTANT:
-1. "allWordConfidences" - Rate EVERY available word (0-100) for how likely it's YOUR team's word based on the current clue. This helps us track your thinking.
+1. "allWordConfidences" - Rate EVERY available word (0-100):
+   - For NORMAL clues: How likely this word is YOUR team's word based on the clue
+   - For AVOIDANCE clues (number=0): How RELATED this word is to the avoidance clue word!
+     ⚠️ Example: If clue is "LOCK 0", rate KEY at 90%+ because key and lock are HIGHLY related!
+     The higher the relatedness, the more DANGEROUS - these words should be avoided!
 2. "guesses" - Only the words you actually want to guess (in order)
 
 FIELDS for guesses:
@@ -363,11 +376,26 @@ export function buildGuesserUserPrompt(
 ## The Clue:
 >>> "${clue}" for ${clueNumber === -1 ? 'UNLIMITED' : clueNumber} word(s) <<<
 ${isWarningClue ? `
-⚠️ **THIS IS A WARNING CLUE (0)!**
+⚠️ **THIS IS A WARNING/AVOIDANCE CLUE (0)!**
 Your Spymaster is telling you which words to AVOID!
 Words related to "${clue}" are DANGEROUS (likely assassin or rival words).
-DO NOT guess words that connect to this clue!
-You may guess OTHER words from previous clues if confident.
+
+**CRITICAL FOR allWordConfidences:**
+For this avoidance clue, rate each word by how RELATED it is to "${clue}":
+- High relatedness (60%+) = DANGEROUS word to avoid
+- Medium relatedness (30-60%) = Somewhat risky
+- Low relatedness (<30%) = Probably safe
+
+**EXAMPLE:** If clue is "LOCK 0":
+- KEY → 95% (keys and locks go together - VERY related!)
+- DOOR → 70% (doors have locks - related)
+- PIANO → 5% (not related to locks at all)
+
+**WHAT TO DO:**
+1. IDENTIFY words that connect to "${clue}" - rate them HIGH in allWordConfidences (they are DANGEROUS!)
+2. GUESS other words that seem safe - words UNRELATED to "${clue}"
+3. You have UNLIMITED guesses - use them wisely on safe-looking words
+4. Consider leftover words from previous clues that are UNRELATED to "${clue}"
 ` : ''}
 ## Guessing Rules:
 - You CAN guess up to ${maxGuesses} words, but you DON'T HAVE TO
@@ -379,8 +407,10 @@ ${currentGuesses.length > 0 ? `- Already guessed this turn: ${currentGuesses.joi
 ## AVAILABLE WORDS ON BOARD (ONLY GUESS FROM THIS LIST!):
 ${unrevealedWords.filter(w => !currentGuesses.includes(w)).join(', ')}
 
-⚠️ CRITICAL: You can ONLY guess words from the list above!
-Words in "ALREADY REVEALED" below are OFF LIMITS - they're already guessed!
+⚠️ CRITICAL REQUIREMENTS:
+1. You can ONLY guess words from the list above!
+2. In "allWordConfidences", you MUST rate EVERY SINGLE word from the list above (${unrevealedWords.filter(w => !currentGuesses.includes(w)).length} words total)
+3. Words in "ALREADY REVEALED" below are OFF LIMITS - they're already guessed!
 
 ## SCORE:
 - Your team: ${yourTeamRemaining} words left
@@ -431,14 +461,19 @@ ${leftoverClues.map(l =>
 Remember: You can use +1 for AT MOST ONE leftover word! Pick the best one after applying decay.
 ` : ''}
 
-### Rival Team's Previous Turns:
+### Rival Team's Previous Turns (for DEDUCTION ONLY - NOT for +1 rule!):
 ${rivalTeamHistory.length > 0 ? rivalTeamHistory.map(t => 
   `- Clue "${t.clue}" (${t.clueNumber}) → Guesses: ${t.guesses.join(', ')} → ${t.guessResults.map(r => r.word + (r.correct ? '✓' : '✗')).join(', ')}`
 ).join('\n') : 'Rival has not played yet'}
 
+⚠️ **CRITICAL: Rival clues are DANGEROUS!**
+- Words that connect to RIVAL clues are likely THEIR TEAM'S words - DO NOT GUESS THEM!
+- The +1 rule ONLY applies to YOUR OWN TEAM'S previous clues, NEVER to rival clues!
+- Use rival history only to AVOID words, never to guess them!
+
 ### What you can learn from history:
-- Previous clues that WORKED tell you about your Spymaster's thinking style
-- LEFTOVER words from previous clues can be guessed with your +1
+- LEFTOVER words from YOUR TEAM's previous clues can be guessed with your +1
+- Words connecting to RIVAL clues should be AVOIDED (they're opponent's words!)
 - Revealed words tell you what categories other words are NOT
 `;
   }
@@ -451,14 +486,17 @@ The clue "${clue}" tells you which words to AVOID (they are dangerous - likely a
 **IMPORTANT: You should still TRY TO GUESS other words!**
 1. First, identify words related to "${clue}" - mark these as DANGEROUS, do NOT guess them
 2. Then, look at ALL OTHER words on the board that are UNRELATED to "${clue}"
-3. Consider: Do any of these unrelated words connect to PREVIOUS clues from your team?
-4. Rate each potential guess with a confidence score (0-100) based on previous clues
-5. Only pass if you truly have no confident guesses from previous turns
+3. Consider: Do any of these unrelated words connect to YOUR TEAM's PREVIOUS clues?
+4. Rate each potential guess with a confidence score (0-100) based on YOUR TEAM's previous clues
+5. Only pass if you truly have no confident guesses from YOUR OWN previous turns
 
-The "0" clue is a WARNING - it does NOT mean "don't guess anything"!
-It means "avoid these specific words, but feel free to guess others".
+⚠️ **CRITICAL RULES:**
+- ONLY use YOUR OWN TEAM's previous clues for guessing!
+- NEVER use RIVAL team's clues - words connecting to rival clues are THEIR words!
+- The "0" clue is a WARNING - it does NOT mean "don't guess anything"!
+- It means "avoid words related to ${clue}, but guess other safe words from YOUR previous clues"
 
-Respond with JSON: {"guesses": [{"word": "WORD1", "confidence": 80}], "reasoning": "avoiding X because of warning, guessing Y because it connects to previous clue Z"}
+Respond with JSON: {"guesses": [{"word": "WORD1", "confidence": 80, "source": "previous", "fromClue": "YOUR_TEAM_CLUE"}], "reasoning": "avoiding X because of warning clue, guessing Y because it connects to MY TEAM's previous clue Z"}
 `;
   } else {
     prompt += `
@@ -510,44 +548,73 @@ export function buildRivalGuesserSystemPrompt(team: Team): string {
 // ============================================
 
 export function buildValidatorSystemPrompt(): string {
-  return `Codenames clue validator. DEFAULT IS VALID.
+  return `You are a strict Codenames clue validator. You must check EVERY rule against EVERY board word.
 
-ONLY mark INVALID if ONE of these STRING rules is violated:
-1. Clue contains SPACES (must be single word)
-2. Clue EXACTLY equals a board word (letter-by-letter identical)
-3. Clue contains a board word as LETTERS (BEARTRAP contains BEAR)
-4. Board word contains clue as LETTERS (SUNFLOWER contains SUN)
-5. Clue is board word + s/es/ing/ed/er suffix (RUNS = RUN + s)
+## RULES TO CHECK (in order):
 
-**EVERYTHING ELSE IS VALID!**
-- Related words = VALID (BREATHE and MOUTH are different strings!)
-- Synonyms = VALID (PLAY and GAME are different strings!)
-- Semantic connections = VALID (that's the whole point of Codenames!)
+☐ **RULE 1: SPACES** - Clue must be a SINGLE word (no spaces, no hyphens)
+☐ **RULE 2: EXACT MATCH** - Clue cannot be identical to any board word
+☐ **RULE 3: CLUE CONTAINS BOARD WORD** - Clue cannot contain any board word as a substring
+   Example: "SUNLIGHT" is INVALID if "SUN" is on the board
+☐ **RULE 4: BOARD WORD CONTAINS CLUE** - Clue cannot be contained within any board word
+   Example: "SUN" is INVALID if "SUNFLOWER" is on the board
+☐ **RULE 5: SHARED ROOT/STEM** - Clue cannot share a root word with any board word
+   Example: "HEROES" is INVALID if "SUPERHERO" is on board (both share "HERO")
+   Example: "RUNNING" is INVALID if "RUN" is on board (same root)
+   Example: "PLAYS" is INVALID if "PLAYER" is on board (both share "PLAY")
+☐ **RULE 6: PLURAL/CONJUGATION** - Clue cannot be plural/conjugation of board word
+   Example: "CATS" is INVALID if "CAT" is on board
+   Example: "PLAYED" is INVALID if "PLAY" is on board
 
-Only check STRING/LETTER patterns, NOT meanings!
-BREATHE does not contain MOUTH as letters → VALID
-BREATH does not contain MOUTH as letters → VALID
+## PROCESS:
+For each board word, mentally check ALL 6 rules. If ANY rule fails for ANY word → INVALID.
 
-Return JSON: {"valid": true/false, "reason": "..."}`;
+## IMPORTANT:
+- Semantic similarity is VALID (related meanings are OK - that's the game!)
+- Only STRING/MORPHOLOGICAL patterns matter
+- When in doubt about root words, strip common suffixes: -s, -es, -ed, -ing, -er, -ly, -tion, -ness
+
+Return JSON: {"valid": true/false, "reason": "Rule X violated: [clue] and [board_word] - [explanation]"}
+If valid: {"valid": true, "reason": "All 6 rules pass for all board words"}`;
 }
 
 export function buildValidatorUserPrompt(
   clue: string,
   boardWords: string[]
 ): string {
-  return `Clue: "${clue}"
-Board words: ${boardWords.join(', ')}
+  const clueUpper = clue.toUpperCase();
+  const clueRoot = clueUpper.replace(/(S|ES|ED|ING|ER|LY|TION|NESS)$/i, '');
+  
+  return `## VALIDATE THIS CLUE
 
-Check ONLY these STRING rules:
-1. Is "${clue}" EXACTLY equal to any board word? (same letters)
-2. Does "${clue}" CONTAIN any board word as letters?
-3. Is "${clue}" CONTAINED in any board word as letters?
-4. Is "${clue}" a board word + s/es/ing/ed suffix?
+**Clue to validate:** "${clue}" (uppercase: ${clueUpper})
+**Clue root (without common suffixes):** "${clueRoot}"
 
-If ANY rule is YES → {"valid": false, "reason": "which word and which rule"}
-If ALL rules are NO → {"valid": true, "reason": "ok"}
+**Board words to check against:**
+${boardWords.map((w, i) => `${i + 1}. ${w}`).join('\n')}
 
-Do NOT check meanings or associations - only letter patterns!`;
+## CHECK EACH RULE FOR EACH WORD:
+
+Go through EVERY board word and check:
+
+☐ Rule 1 (Spaces): Does "${clue}" contain spaces or hyphens? 
+☐ Rule 2 (Exact): Is "${clueUpper}" identical to any board word?
+☐ Rule 3 (Clue contains word): Does "${clueUpper}" contain any board word as substring?
+☐ Rule 4 (Word contains clue): Is "${clueUpper}" a substring of any board word?
+☐ Rule 5 (Shared root): Does "${clueRoot}" appear in any board word, or does any board word's root appear in "${clueUpper}"?
+   - Check: Does any word contain "${clueRoot}"? 
+   - Check: Does "${clueUpper}" contain the root of any board word?
+☐ Rule 6 (Plural/conjugation): Is "${clue}" just a board word with -s/-es/-ed/-ing/-er added or removed?
+
+## EXAMPLES OF VIOLATIONS:
+- "HEROES" + "SUPERHERO" → INVALID (both contain "HERO")
+- "CATS" + "CAT" → INVALID (plural)
+- "SUNLIGHT" + "SUN" → INVALID (contains)
+- "PLAY" + "PLAYING" → INVALID (conjugation)
+
+## YOUR RESPONSE:
+If ANY rule fails for ANY word: {"valid": false, "reason": "Rule X: [clue] and [board_word] share [pattern]"}
+If ALL rules pass: {"valid": true, "reason": "All rules pass"}`;
 }
 
 // ============================================

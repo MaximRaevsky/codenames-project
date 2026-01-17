@@ -289,7 +289,7 @@ export const useAppState = create<AppState>()(
           // Check if cancelled during API call
           if (get().gameCancelled) return;
           
-          // Update with AI guesses and reasoning
+          // Update with AI guesses, reasoning, and word confidences
           const currentGame = get().game;
           if (currentGame && currentGame.currentClue?.word === clue) {
             set({
@@ -297,6 +297,7 @@ export const useAppState = create<AppState>()(
                 ...currentGame,
                 aiPlannedGuesses: aiResponse.guesses,
                 aiGuesserReasoning: aiResponse.reasoning,
+                aiGuesserWordConfidences: aiResponse.allWordConfidences,
               },
             });
           }
@@ -422,7 +423,11 @@ export const useAppState = create<AppState>()(
             newGuesses,
             newResults,
             newBoard.teamARemaining,
-            newBoard.teamBRemaining
+            newBoard.teamBRemaining,
+            game.currentClue?.intendedTargets,
+            game.currentClue?.reasoning,
+            game.aiGuesserReasoning,
+            game.aiGuesserWordConfidences
           );
 
           set({
@@ -483,7 +488,8 @@ export const useAppState = create<AppState>()(
           game.board.teamBRemaining,
           game.currentClue?.intendedTargets,  // Store what the spymaster intended
           game.currentClue?.reasoning,        // Store spymaster's reasoning
-          game.aiGuesserReasoning             // Store AI guesser's reasoning (if any)
+          game.aiGuesserReasoning,            // Store AI guesser's reasoning (if any)
+          game.aiGuesserWordConfidences       // Store AI guesser's word confidences for persistence
         );
 
         const nextTeam: Team = game.currentTeam === 'teamA' ? 'teamB' : 'teamA';
@@ -503,6 +509,7 @@ export const useAppState = create<AppState>()(
             aiPlannedGuesses: [],
             turnShouldEnd: false,
             aiGuesserReasoning: undefined,
+            aiGuesserWordConfidences: undefined, // Clear stale confidence data from previous turn
           },
         });
       },
@@ -528,7 +535,11 @@ export const useAppState = create<AppState>()(
           [],
           [],
           game.board.teamARemaining,
-          game.board.teamBRemaining
+          game.board.teamBRemaining,
+          undefined, // intendedTargets
+          undefined, // spymasterReasoning
+          undefined, // guesserReasoning
+          undefined  // guesserWordConfidences
         );
 
         const nextTeam: Team = game.currentTeam === 'teamA' ? 'teamB' : 'teamA';
@@ -547,6 +558,7 @@ export const useAppState = create<AppState>()(
             phaseTimeLimit: getPhaseTimeLimit(get().settings.timerMinutes),
             aiPlannedGuesses: [],
             turnShouldEnd: false,
+            aiGuesserWordConfidences: undefined, // Clear stale confidence data
           },
         });
       },
@@ -591,7 +603,12 @@ export const useAppState = create<AppState>()(
           set({
             game: {
               ...game,
-              currentClue: { word: rivalResult.clue, number: rivalResult.number },
+              currentClue: { 
+                word: rivalResult.clue, 
+                number: rivalResult.number,
+                intendedTargets: rivalResult.intendedTargets,
+                reasoning: rivalResult.reasoning,
+              },
               currentPhase: 'guess',
               guessesRemaining: rivalResult.guesses.length,
               currentTurnGuesses: [],
@@ -600,6 +617,7 @@ export const useAppState = create<AppState>()(
               phaseTimeLimit: getPhaseTimeLimit(get().settings.timerMinutes),
               aiPlannedGuesses: rivalResult.guesses,
               turnShouldEnd: false,
+              aiGuesserWordConfidences: rivalResult.guesserWordConfidences, // Store rival's confidences
             },
           });
 
