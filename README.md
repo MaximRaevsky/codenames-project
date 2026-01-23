@@ -11,7 +11,7 @@ A web application for playing Codenames with an AI teammate. Built for researchi
 - [Configuration](#configuration)
 - [Running the Application](#running-the-application)
 - [How to Play](#how-to-play)
-- [Data Storage & Export](#data-storage--export)
+- [Data Storage](#data-storage)
 - [Project Structure](#project-structure)
 - [Tech Stack](#tech-stack)
 - [Troubleshooting](#troubleshooting)
@@ -46,7 +46,6 @@ Team up with an AI partner to play Codenames against an AI opponent team. Choose
 - **Post-Game Feedback**: Surveys capture trust, clarity, and satisfaction ratings (1-7 scale)
 - **Metrics Dashboard**: Visualizes trust evolution and performance trends over time
 - **Full Logging**: Complete turn history with AI reasoning, intended targets, and confidence scores
-- **Data Export**: Export all user data as CSV for analysis
 
 ---
 
@@ -218,7 +217,7 @@ npm run preview
 
 ---
 
-## Data Storage & Export
+## Data Storage
 
 ### How Data is Stored
 
@@ -240,21 +239,6 @@ JSON.parse(localStorage.getItem('coname-user-database'))
 // View current game state
 JSON.parse(localStorage.getItem('coname-game-state'))
 ```
-
-### Exporting Data for Research
-
-The application includes a CSV export feature in the Metrics page:
-
-1. Navigate to the **Metrics** page (chart icon in header)
-2. Scroll to the bottom
-3. Click **"Export All Data (CSV)"**
-
-The CSV includes:
-- User profile information
-- Game history and outcomes
-- Turn-by-turn data with AI reasoning
-- Trust ratings and survey responses
-- AI learning summary evolution
 
 ### Clearing Data
 
