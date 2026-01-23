@@ -51,6 +51,9 @@ export interface TurnEvent {
   
   // AI Guesser's confidence evaluations for ALL words (for persistent tracking)
   guesserWordConfidences?: { word: string; confidence: number }[];
+  
+  // AI Guesser's explanations for why each word relates to the clue
+  guesserWordExplanations?: Record<string, string>;
 }
 
 export interface GuessResult {
@@ -181,6 +184,9 @@ export interface GameState {
   // AI guesser's confidence evaluations for all words (for persistent tracking)
   aiGuesserWordConfidences?: { word: string; confidence: number }[];
   
+  // AI guesser's explanations for why each word relates to the clue
+  aiGuesserWordExplanations?: Record<string, string>;
+  
   // Game metadata
   startingTeam?: Team;
   gameOverReason?: string;
@@ -216,6 +222,8 @@ export interface GuesserResponse {
   reasoning?: string;
   // AI's confidence evaluation for ALL unrevealed words (for persistent tracking)
   allWordConfidences?: { word: string; confidence: number }[];
+  // AI's explanations for why each word relates to the clue
+  wordExplanations?: Record<string, string>;
 }
 
 // ============================================

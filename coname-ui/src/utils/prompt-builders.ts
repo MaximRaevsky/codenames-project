@@ -294,7 +294,11 @@ PRIORITY ORDER:
     {"word": "WORD1", "confidence": 95, "source": "current"},
     {"word": "WORD2", "confidence": 70, "source": "current"}
   ],
-  "reasoning": "Why these words connect to the clue"
+  "wordExplanations": {
+    "WORD1": "brief explanation of why this word relates to the clue",
+    "WORD2": "brief explanation of why this word relates to the clue"
+  },
+  "reasoning": "Overall summary of your guessing strategy"
 }
 
 ⚠️ CRITICAL - "allWordConfidences" IS MANDATORY!
@@ -308,6 +312,10 @@ IMPORTANT:
      ⚠️ Example: If clue is "LOCK 0", rate KEY at 90%+ because key and lock are HIGHLY related!
      The higher the relatedness, the more DANGEROUS - these words should be avoided!
 2. "guesses" - Only the words you actually want to guess (in order)
+3. "wordExplanations" - For EACH guessed word, provide a BRIEF human-readable explanation:
+   - Explain the semantic connection (e.g., "ALIEN relates to SPACE because aliens come from outer space")
+   - Keep it natural and conversational, like explaining to a friend
+   - For +1 leftover words, mention which previous clue it relates to
 
 FIELDS for guesses:
 - "source": "current" (matches current clue) or "previous" (leftover from +1 rule)

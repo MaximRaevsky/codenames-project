@@ -1,6 +1,52 @@
 import { motion } from 'framer-motion';
 import { Target, MessageSquare, CheckCircle, XCircle, HelpCircle } from 'lucide-react';
-import { TurnEvent, PlayerRole } from '../types/game';
+import { TurnEvent, PlayerRole, CardCategory } from '../types/game';
+
+// Convert category to human-readable name based on user's team
+function getCategoryDisplayName(category: CardCategory, userTeam: 'teamA' | 'teamB'): string {
+  if (category === 'neutral') return 'neutral';
+  if (category === 'assassin') return 'assassin';
+  // Check if it's rival or own team
+  const isRival = (userTeam === 'teamA' && category === 'teamB') || 
+                  (userTeam === 'teamB' && category === 'teamA');
+  return isRival ? 'rival' : 'your team';
+}
+
+// Build reasoning based on words that were ACTUALLY guessed (not planned)
+function buildGuesserReasoningFromActualGuesses(
+  clue: string,
+  actualGuesses: string[],
+  wordExplanations?: Record<string, string>
+): string {
+  if (actualGuesses.length === 0) {
+    return 'No guesses were made this turn.';
+  }
+
+  const explanations = actualGuesses.map(word => {
+    const explanation = wordExplanations?.[word] || 
+                       wordExplanations?.[word.toUpperCase()] || 
+                       wordExplanations?.[word.toLowerCase()];
+    if (explanation) {
+      // Clean up the explanation - remove redundant phrases and trailing punctuation
+      let cleanExplanation = explanation
+        .replace(/^because\s*/i, '')
+        .replace(/^relates to \w+\s*(because\s*)?/i, '')
+        .replace(/\.+$/, '') // Remove trailing periods
+        .trim();
+      // Ensure first letter is lowercase for natural flow
+      if (cleanExplanation.length > 0) {
+        cleanExplanation = cleanExplanation.charAt(0).toLowerCase() + cleanExplanation.slice(1);
+      }
+      return `'${word}' - ${cleanExplanation}`;
+    }
+    return `'${word}'`;
+  });
+
+  if (explanations.length === 1) {
+    return `For the clue '${clue}', I guessed ${explanations[0]}.`;
+  }
+  return `For the clue '${clue}', I guessed: ${explanations.join('; ')}.`;
+}
 
 interface GameSummaryProps {
   turnHistory: TurnEvent[];
@@ -34,6 +80,7 @@ export function GameSummary({ turnHistory, userRole, userTeam }: GameSummaryProp
             turn={turn} 
             turnNumber={index + 1}
             userRole={userRole}
+            userTeam={userTeam}
           />
         ))}
       </div>
@@ -56,9 +103,10 @@ interface TurnSummaryCardProps {
   turn: TurnEvent;
   turnNumber: number;
   userRole: PlayerRole;
+  userTeam: 'teamA' | 'teamB';
 }
 
-function TurnSummaryCard({ turn, turnNumber, userRole }: TurnSummaryCardProps) {
+function TurnSummaryCard({ turn, turnNumber, userRole, userTeam }: TurnSummaryCardProps) {
   const intendedWords = turn.intendedTargets || [];
   const guessedWords = turn.guesses || [];
   const guessResults = turn.guessResults || [];
@@ -134,7 +182,7 @@ function TurnSummaryCard({ turn, turnNumber, userRole }: TurnSummaryCardProps) {
                         </span>
                       ) : (
                         <span className="flex items-center gap-1 text-red-500">
-                          <XCircle className="w-4 h-4" /> Wrong ({result.category})
+                          <XCircle className="w-4 h-4" /> Wrong ({getCategoryDisplayName(result.category, userTeam)})
                         </span>
                       )
                     ) : (
@@ -164,7 +212,7 @@ function TurnSummaryCard({ turn, turnNumber, userRole }: TurnSummaryCardProps) {
                           </span>
                         ) : (
                           <span className="flex items-center gap-1 text-red-500">
-                            <XCircle className="w-4 h-4" /> Wrong ({result.category})
+                            <XCircle className="w-4 h-4" /> Wrong ({getCategoryDisplayName(result.category, userTeam)})
                           </span>
                         )
                       ) : null}
@@ -183,10 +231,12 @@ function TurnSummaryCard({ turn, turnNumber, userRole }: TurnSummaryCardProps) {
           </div>
         )}
         
-        {turn.guesserReasoning && userRole === 'spymaster' && (
+        {userRole === 'spymaster' && guessedWords.length > 0 && (
           <div className="mt-4 p-3 bg-blue-50 rounded-lg">
             <p className="text-xs font-medium text-blue-700 mb-1">AI Guesser's Reasoning:</p>
-            <p className="text-sm text-blue-900">{turn.guesserReasoning}</p>
+            <p className="text-sm text-blue-900">
+              {buildGuesserReasoningFromActualGuesses(turn.clue, guessedWords, turn.guesserWordExplanations)}
+            </p>
           </div>
         )}
         

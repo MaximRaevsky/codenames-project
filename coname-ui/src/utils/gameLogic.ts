@@ -203,7 +203,8 @@ export function createTurnEvent(
   intendedTargets?: string[],
   spymasterReasoning?: string,
   guesserReasoning?: string,
-  guesserWordConfidences?: { word: string; confidence: number }[]
+  guesserWordConfidences?: { word: string; confidence: number }[],
+  guesserWordExplanations?: Record<string, string>
 ): TurnEvent {
   return {
     id: generateId(),
@@ -220,6 +221,7 @@ export function createTurnEvent(
     spymasterReasoning,
     guesserReasoning,
     guesserWordConfidences,
+    guesserWordExplanations,
   };
 }
 

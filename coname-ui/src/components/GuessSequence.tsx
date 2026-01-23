@@ -115,7 +115,7 @@ const getCorrectResult = (word: string, teamColor: 'red' | 'blue'): ResultMessag
 const getRivalResult = (word: string, userIsRed: boolean): ResultMessageConfig => ({
   icon: <Users className="w-6 h-6" />,
   title: 'Rival Team Word!',
-  message: `"${word}" belongs to the rival team. Turn ends.`,
+  message: `"${word}" belongs to the rival team. They get a point!`,
   bgColor: userIsRed ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200',
   textColor: userIsRed ? 'text-blue-700' : 'text-red-700',
   iconColor: userIsRed ? 'text-blue-500' : 'text-red-500',

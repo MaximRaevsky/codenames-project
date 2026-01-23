@@ -321,7 +321,7 @@ export const MetricsPage: FC = () => {
               <MetricCard
                 title="AI Learning"
                 value={metrics.hasSummary ? 'Active' : 'Pending'}
-                subtitle={metrics.hasSummary ? `${metrics.summaryLength} chars learned` : 'No summary yet'}
+                subtitle={metrics.hasSummary ? 'Clues & guesses personalized' : 'Complete more games'}
                 icon={<Zap className="w-5 h-5" />}
                 color={metrics.hasSummary ? 'orange' : 'purple'}
               />
@@ -393,7 +393,7 @@ export const MetricsPage: FC = () => {
                     <div className="p-3 bg-green-50 rounded-lg border border-green-200">
                       <div className="text-green-700 font-medium text-sm">Summary Active</div>
                       <div className="text-green-600 text-xs mt-1">
-                        AI has learned {metrics.summaryLength} characters about your play style
+                        AI adjusts clue creativity and risk based on your preferences
                       </div>
                     </div>
                   ) : (
@@ -522,23 +522,66 @@ export const MetricsPage: FC = () => {
               </div>
             )}
 
-            {/* Current Summary Preview */}
-            {userData?.llmSummary && (
-              <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-                <h2 className="font-display font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <Brain className="w-5 h-5 text-orange-500" />
-                  What the AI Has Learned About You
-                </h2>
-                <div className="p-4 bg-gradient-to-br from-orange-50 to-yellow-50 rounded-xl border border-orange-100">
-                  <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
-                    {userData.llmSummary}
-                  </pre>
-                </div>
-                <p className="text-xs text-gray-400 mt-3">
-                  This summary is updated after each game based on your gameplay patterns and feedback.
+            {/* How We're Learning About You */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
+              <h2 className="font-display font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <Brain className="w-5 h-5 text-orange-500" />
+                How We're Learning About You
+              </h2>
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  The AI adapts to your play style through several mechanisms:
                 </p>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl border border-purple-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MessageSquare className="w-4 h-4 text-purple-500" />
+                      <span className="font-medium text-purple-700">Your Feedback</span>
+                    </div>
+                    <p className="text-xs text-gray-600">
+                      After each game, your survey responses and written feedback help us understand what clue styles work best for you.
+                    </p>
+                  </div>
+                  <div className="p-4 bg-gradient-to-br from-green-50 to-teal-50 rounded-xl border border-green-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Target className="w-4 h-4 text-green-500" />
+                      <span className="font-medium text-green-700">Gameplay Patterns</span>
+                    </div>
+                    <p className="text-xs text-gray-600">
+                      We track which clues led to successful guesses and which caused confusion, learning your interpretation style.
+                    </p>
+                  </div>
+                  <div className="p-4 bg-gradient-to-br from-orange-50 to-yellow-50 rounded-xl border border-orange-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users className="w-4 h-4 text-orange-500" />
+                      <span className="font-medium text-orange-700">Your Profile</span>
+                    </div>
+                    <p className="text-xs text-gray-600">
+                      Your interests, occupation, and problem-solving approach help the AI choose clues that resonate with your background.
+                    </p>
+                  </div>
+                  <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Activity className="w-4 h-4 text-blue-500" />
+                      <span className="font-medium text-blue-700">Continuous Improvement</span>
+                    </div>
+                    <p className="text-xs text-gray-600">
+                      After each game, the AI updates its understanding of your preferences, getting better at communicating with you over time.
+                    </p>
+                  </div>
+                </div>
+                {metrics.hasSummary && (
+                  <div className="p-3 bg-green-50 rounded-lg border border-green-200 mt-4">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-green-600" />
+                      <span className="text-green-700 font-medium text-sm">
+                        AI Adaptation Active - Personalizing clues and guesses based on your play history
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </>
         )}
       </motion.div>

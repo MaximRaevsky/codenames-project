@@ -43,11 +43,6 @@ export async function callAgent(
     throw new Error('OpenAI API key not configured. Set VITE_OPENAI_API_KEY in .env');
   }
 
-  console.log('🤖 [AGENT] Making API call to GPT-4o...');
-  console.log('🤖 [AGENT] System prompt length:', systemPrompt.length);
-  console.log('🤖 [AGENT] User message length:', userMessage.length);
-  console.log('🤖 [AGENT] Options:', { temperature, maxTokens, jsonMode });
-
   const messages: OpenAIMessage[] = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userMessage },
@@ -74,7 +69,6 @@ export async function callAgent(
   }
 
   try {
-    console.log('🤖 [AGENT] Sending request to:', OPENAI_API_URL);
     const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
@@ -84,23 +78,16 @@ export async function callAgent(
       body: JSON.stringify(request),
     });
 
-    console.log('🤖 [AGENT] Response status:', response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ [AGENT] API error:', response.status, errorText);
       throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
     }
 
     const data: OpenAIResponse = await response.json();
-    console.log('🤖 [AGENT] Response received:', JSON.stringify(data, null, 2).substring(0, 500));
-
     const text = data.choices[0]?.message?.content || '';
-    console.log('✅ [AGENT] Extracted text:', text.substring(0, 200));
 
     return text;
   } catch (error) {
-    console.error('❌ [AGENT] Error calling API:', error);
     throw error;
   }
 }

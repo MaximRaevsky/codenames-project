@@ -100,7 +100,6 @@ export const CountdownTimer: FC<CountdownTimerProps> = ({
 
       if (newRemaining === 0 && onTimeUp && !hasFired) {
         hasFired = true;
-        console.log('CountdownTimer: Time is up! Calling onTimeUp');
         onTimeUp();
         clearInterval(interval);
       }

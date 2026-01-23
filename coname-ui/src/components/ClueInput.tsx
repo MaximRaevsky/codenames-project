@@ -62,7 +62,6 @@ export function ClueInput({ boardWords, teamWords, maxNumber, onSubmit }: ClueIn
 
       // Show warning if there is one
       if (clueValidation.reason) {
-        console.log('Clue validation warning:', clueValidation.reason);
       }
 
       // Show success briefly

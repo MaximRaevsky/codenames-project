@@ -1,8 +1,10 @@
 # CoName UI
 
-This is the frontend application for CoName - an AI-powered Codenames game.
+Frontend application for CoName - an AI-powered Codenames game for Human-AI collaboration research.
 
-**For complete documentation, setup instructions, and API key configuration, see the [main README](../README.md) in the project root.**
+> **For complete documentation, see the [main README](../README.md) in the project root.**
+
+---
 
 ## Quick Start
 
@@ -10,13 +12,27 @@ This is the frontend application for CoName - an AI-powered Codenames game.
 # 1. Install dependencies
 npm install
 
-# 2. Create .env file with your OpenAI API key
+# 2. Create environment file
 cp .env.example .env
-# Edit .env and add your VITE_OPENAI_API_KEY
 
-# 3. Start development server
+# 3. Add your OpenAI API key to .env
+# Edit .env and set: VITE_OPENAI_API_KEY=sk-your-key-here
+
+# 4. Start development server
 npm run dev
 ```
+
+Open **http://localhost:5173** in your browser.
+
+---
+
+## Requirements
+
+- Node.js 18+
+- npm 9+
+- OpenAI API key ([get one here](https://platform.openai.com/api-keys))
+
+---
 
 ## Scripts
 
@@ -26,14 +42,29 @@ npm run dev
 | `npm run build` | Build for production |
 | `npm run preview` | Preview production build |
 
+---
+
 ## Environment Variables
 
-See `.env.example` for required configuration:
+Copy `.env.example` to `.env` and configure:
 
 ```env
-VITE_OPENAI_API_KEY=sk-your-key-here
+VITE_OPENAI_API_KEY=sk-your-openai-api-key-here
 ```
 
 ---
 
-See [main README](../README.md) for full documentation.
+## Project Structure
+
+```
+src/
+├── pages/           # Main views (Welcome, Game, Profile, Metrics)
+├── components/      # Reusable UI components
+├── utils/           # AI agents, game logic, database
+├── hooks/           # State management (Zustand)
+└── types/           # TypeScript interfaces
+```
+
+---
+
+See [main README](../README.md) for full documentation, gameplay instructions, and troubleshooting.

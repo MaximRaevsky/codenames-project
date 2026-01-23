@@ -187,10 +187,6 @@ export async function updateSummaryAfterGame(
   email: string,
   gameSession: GameSessionData
 ): Promise<string | null> {
-  console.log('═══════════════════════════════════════════════════════════');
-  console.log('📊 [SUMMARY AGENT] Generating summary update for:', email);
-  console.log('📊 [SUMMARY AGENT] Game outcome:', gameSession.won ? 'WIN' : 'LOSS');
-  console.log('📊 [SUMMARY AGENT] Player role:', gameSession.playerRole);
 
   const user = getUser(email);
   if (!user) {
@@ -205,7 +201,6 @@ export async function updateSummaryAfterGame(
     const systemPrompt = buildSummarySystemPrompt();
     const userPrompt = buildSummaryUserPrompt(user, gameSession, user.llmSummary);
 
-    console.log('📊 [SUMMARY AGENT] Sending to AI for analysis...');
     
     const response = await callAgent(systemPrompt, userPrompt, {
       temperature: 0.4, // Lower temperature for consistent analysis
@@ -213,7 +208,6 @@ export async function updateSummaryAfterGame(
       jsonMode: true,
     });
 
-    console.log('📊 [SUMMARY AGENT] Raw response:', response);
     const parsed = parseAgentJson<SummaryUpdateResponse>(response);
 
     if (!parsed.summary) {
@@ -251,10 +245,6 @@ export async function updateSummaryAfterGame(
     const success = updateUserSummary(email, summary, updateReason, 'game');
     
     if (success) {
-      console.log('✅ [SUMMARY AGENT] Summary updated successfully');
-      console.log('📋 Key insights:', parsed.keyInsights?.join(', ') || 'None extracted');
-      console.log('📝 Update reason:', updateReason);
-      console.log('═══════════════════════════════════════════════════════════');
       return summary;
     } else {
       console.error('❌ [SUMMARY AGENT] Failed to save summary to database');
@@ -273,12 +263,10 @@ export async function updateSummaryAfterGame(
 export async function updateSummaryOnProfileChange(
   email: string
 ): Promise<string | null> {
-  console.log('📊 [SUMMARY AGENT] Profile changed, checking if summary update needed:', email);
 
   const user = getUser(email);
   if (!user || !user.llmSummary) {
     // No existing summary to update
-    console.log('📊 [SUMMARY AGENT] No existing summary to update');
     return null;
   }
 
@@ -303,12 +291,9 @@ export async function updateSummaryOnProfileChange(
       const updateReason = parsed.updateReason || 'Profile information updated by user';
       const success = updateUserSummary(email, parsed.summary, updateReason, 'profile_change');
       if (success) {
-        console.log('✅ [SUMMARY AGENT] Summary updated after profile change');
-        console.log('📝 Update reason:', updateReason);
         return parsed.summary;
       }
     } else {
-      console.log('📊 [SUMMARY AGENT] No summary changes needed');
     }
 
     return user.llmSummary;
@@ -362,9 +347,6 @@ export function syncProfileSummary(profile: UserProfile): void {
 export async function generateInitialSummary(profile: UserProfile): Promise<string | null> {
   if (!profile.email) return null;
   
-  console.log('═══════════════════════════════════════════════════════════');
-  console.log('📊 [SUMMARY AGENT] Generating INITIAL summary from profile...');
-  console.log('📊 [SUMMARY AGENT] User:', profile.email);
 
   try {
     const systemPrompt = `Create an initial player profile for Codenames AI (MAX 60 words, 3-4 bullet points).
@@ -427,7 +409,6 @@ This is their FIRST profile - no game history yet. Make reasonable predictions.`
       jsonMode: true,
     });
 
-    console.log('📊 [SUMMARY AGENT] Raw response:', response);
     const parsed = parseAgentJson<{ summary: string; keyInsights?: string[] }>(response);
 
     if (!parsed.summary) {
@@ -435,9 +416,6 @@ This is their FIRST profile - no game history yet. Make reasonable predictions.`
       return null;
     }
 
-    console.log('✅ [SUMMARY AGENT] Initial summary generated successfully');
-    console.log('📋 Key insights:', parsed.keyInsights?.join(', ') || 'None extracted');
-    console.log('═══════════════════════════════════════════════════════════');
     
     return parsed.summary;
   } catch (error) {

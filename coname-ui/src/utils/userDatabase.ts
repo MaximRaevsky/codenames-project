@@ -137,7 +137,6 @@ export function getAllUsers(): Record<string, UserRecord> {
   try {
     const data = localStorage.getItem(DB_KEY);
     const users = data ? JSON.parse(data) : {};
-    console.log('📂 [USER DB] Reading database:', Object.keys(users).length, 'users');
     return users;
   } catch {
     console.error('❌ [USER DB] Error reading user database');
@@ -160,9 +159,7 @@ export function getUser(email: string): UserRecord | null {
   const user = users[normalizedEmail] || null;
   
   if (user) {
-    console.log('👤 [USER DB] Retrieved user:', normalizedEmail, '| Games played:', user.gamesPlayed, '| Has summary:', !!user.llmSummary);
   } else {
-    console.log('👤 [USER DB] User not found:', normalizedEmail);
   }
   
   return user;
@@ -228,19 +225,9 @@ export function saveUser(profile: UserProfile): UserRecord | null {
   
   try {
     localStorage.setItem(DB_KEY, JSON.stringify(users));
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log(`💾 [USER DB] ${isNewUser ? 'CREATED NEW USER' : 'UPDATED USER'}: ${normalizedEmail}`);
-    console.log(`   Age: ${userRecord.age || 'N/A'}`);
-    console.log(`   Occupation: ${userRecord.occupation || 'N/A'}`);
-    console.log(`   Interests: ${userRecord.interests?.join(', ') || 'None'}`);
-    console.log(`   Games Played: ${userRecord.gamesPlayed}`);
     if (userRecord.llmSummary) {
-      console.log(`   📋 SUMMARY (${userRecord.llmSummary.length} chars):`);
-      console.log(`   ${userRecord.llmSummary}`);
     } else {
-      console.log(`   📋 SUMMARY: None yet (will be generated after first game)`);
     }
-    console.log('═══════════════════════════════════════════════════════════');
     return userRecord;
   } catch (error) {
     console.error('❌ [USER DB] Error saving user to database:', error);
@@ -291,15 +278,6 @@ export function updateUserSummary(
 
   try {
     localStorage.setItem(DB_KEY, JSON.stringify(users));
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log(`📝 [USER DB] UPDATED SUMMARY: ${normalizedEmail}`);
-    console.log(`   Trigger: ${trigger}`);
-    console.log(`   Reason: ${reason}`);
-    console.log(`   Old length: ${oldSummaryLength} chars`);
-    console.log(`   New length: ${newSummary.length} chars`);
-    console.log(`   History entries: ${user.summaryHistory.length}`);
-    console.log(`   Preview: ${newSummary.substring(0, 100)}${newSummary.length > 100 ? '...' : ''}`);
-    console.log('═══════════════════════════════════════════════════════════');
     return true;
   } catch (error) {
     console.error('❌ [USER DB] Error updating user summary:', error);
@@ -335,7 +313,6 @@ export function recordGamePlayed(email: string): boolean {
 
   try {
     localStorage.setItem(DB_KEY, JSON.stringify(users));
-    console.log(`🎮 [USER DB] Game recorded for ${normalizedEmail}: ${previousCount} → ${user.gamesPlayed} games`);
     return true;
   } catch {
     console.error('❌ [USER DB] Error recording game');
@@ -354,7 +331,6 @@ export function deleteUser(email: string): boolean {
   const users = getAllUsers();
 
   if (!users[normalizedEmail]) {
-    console.log(`⚠️ [USER DB] Cannot delete - user not found: ${normalizedEmail}`);
     return false;
   }
 
@@ -363,14 +339,8 @@ export function deleteUser(email: string): boolean {
 
   try {
     localStorage.setItem(DB_KEY, JSON.stringify(users));
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log(`🗑️ [USER DB] DELETED USER: ${normalizedEmail}`);
-    console.log(`   Games played: ${userData.gamesPlayed}`);
-    console.log(`   Had summary: ${!!userData.llmSummary}`);
     if (userData.llmSummary) {
-      console.log(`   Summary was: ${userData.llmSummary}`);
     }
-    console.log('═══════════════════════════════════════════════════════════');
     return true;
   } catch {
     console.error('❌ [USER DB] Error deleting user');
@@ -474,7 +444,6 @@ export function exportUsersToCSV(): string {
   const userList = Object.values(users);
   
   if (userList.length === 0) {
-    console.log('📊 [CSV] No users to export');
     return '';
   }
 
@@ -514,7 +483,6 @@ export function exportUsersToCSV(): string {
   }
 
   const csv = rows.join('\n');
-  console.log(`📊 [CSV] Exported ${userList.length} users to CSV`);
   return csv;
 }
 
@@ -540,43 +508,15 @@ export function downloadUsersCSV(): void {
   link.click();
   document.body.removeChild(link);
   
-  console.log('📥 [CSV] Downloaded user database CSV');
 }
 
 /**
- * Prints all users to console in a readable format
- * Useful for debugging
+ * Gets all users formatted for display
+ * Returns user data that can be viewed in console
  */
-export function printAllUsers(): void {
+export function printAllUsers(): UserRecord[] {
   const users = getAllUsers();
-  const userList = Object.values(users);
-  
-  console.log('═══════════════════════════════════════════════════════════');
-  console.log(`📊 [USER DB] ALL USERS (${userList.length} total)`);
-  console.log('═══════════════════════════════════════════════════════════');
-  
-  if (userList.length === 0) {
-    console.log('   (No users in database)');
-    return;
-  }
-
-  for (const user of userList) {
-    console.log(`\n👤 ${user.email}`);
-    console.log(`   Age: ${user.age || 'N/A'}`);
-    console.log(`   Occupation: ${user.occupation || 'N/A'}`);
-    console.log(`   Approach: ${user.problemSolvingApproach || 'N/A'}`);
-    console.log(`   Interests: ${user.interests?.join(', ') || 'None'}`);
-    console.log(`   Notes: ${user.additionalNotes || 'None'}`);
-    console.log(`   Games: ${user.gamesPlayed}`);
-    console.log(`   Created: ${user.createdAt ? new Date(user.createdAt).toLocaleString() : 'N/A'}`);
-    console.log(`   Last Game: ${user.lastGameAt ? new Date(user.lastGameAt).toLocaleString() : 'Never'}`);
-    if (user.llmSummary) {
-      console.log(`   📋 Summary: ${user.llmSummary.substring(0, 200)}${user.llmSummary.length > 200 ? '...' : ''}`);
-    } else {
-      console.log(`   📋 Summary: None`);
-    }
-  }
-  console.log('\n═══════════════════════════════════════════════════════════');
+  return Object.values(users);
 }
 
 /**
@@ -609,6 +549,5 @@ if (typeof window !== 'undefined') {
     printAllUsers,
     getDatabaseStats,
   };
-  console.log('🎮 [CoName DB] Database tools available! Use: conameDB.printAllUsers(), conameDB.downloadUsersCSV(), etc.');
 }
 

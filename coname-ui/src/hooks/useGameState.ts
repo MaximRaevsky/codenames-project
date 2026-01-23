@@ -108,13 +108,11 @@ export const useAppState = create<AppState>()(
       // Game cancellation
       gameCancelled: false,
       cancelGame: () => {
-        console.log('🛑 [GAME] Game cancelled - stopping all AI processes');
         set({ gameCancelled: true });
       },
       
       // Logout - clear profile and reset state
       logout: () => {
-        console.log('👋 [AUTH] Logging out...');
         set({
           profile: DEFAULT_PROFILE,
           hasCompletedProfile: false,
@@ -143,7 +141,6 @@ export const useAppState = create<AppState>()(
         
         // If user is NEW or has NO summary, generate initial summary from profile
         if (profile.email && !hasExistingSummary) {
-          console.log('📝 [PROFILE] New user or no summary - generating initial summary...');
           generateInitialSummary(profile).then(newSummary => {
             if (newSummary) {
               // Update profile and database with the new summary
@@ -289,7 +286,7 @@ export const useAppState = create<AppState>()(
           // Check if cancelled during API call
           if (get().gameCancelled) return;
           
-          // Update with AI guesses, reasoning, and word confidences
+          // Update with AI guesses, reasoning, word confidences, and explanations
           const currentGame = get().game;
           if (currentGame && currentGame.currentClue?.word === clue) {
             set({
@@ -298,6 +295,7 @@ export const useAppState = create<AppState>()(
                 aiPlannedGuesses: aiResponse.guesses,
                 aiGuesserReasoning: aiResponse.reasoning,
                 aiGuesserWordConfidences: aiResponse.allWordConfidences,
+                aiGuesserWordExplanations: aiResponse.wordExplanations,
               },
             });
           }
@@ -427,7 +425,8 @@ export const useAppState = create<AppState>()(
             game.currentClue?.intendedTargets,
             game.currentClue?.reasoning,
             game.aiGuesserReasoning,
-            game.aiGuesserWordConfidences
+            game.aiGuesserWordConfidences,
+            game.aiGuesserWordExplanations
           );
 
           set({
@@ -473,7 +472,6 @@ export const useAppState = create<AppState>()(
         if (game.status === 'gameOver') return;
         // Only end guessing phase if we're actually in guess phase with a clue
         if (game.currentPhase !== 'guess' || !game.currentClue) {
-          console.log('Cannot end guessing phase - not in guess phase or no clue');
           return;
         }
 
@@ -489,7 +487,8 @@ export const useAppState = create<AppState>()(
           game.currentClue?.intendedTargets,  // Store what the spymaster intended
           game.currentClue?.reasoning,        // Store spymaster's reasoning
           game.aiGuesserReasoning,            // Store AI guesser's reasoning (if any)
-          game.aiGuesserWordConfidences       // Store AI guesser's word confidences for persistence
+          game.aiGuesserWordConfidences,      // Store AI guesser's word confidences for persistence
+          game.aiGuesserWordExplanations      // Store AI guesser's word explanations
         );
 
         const nextTeam: Team = game.currentTeam === 'teamA' ? 'teamB' : 'teamA';
@@ -510,6 +509,7 @@ export const useAppState = create<AppState>()(
             turnShouldEnd: false,
             aiGuesserReasoning: undefined,
             aiGuesserWordConfidences: undefined, // Clear stale confidence data from previous turn
+            aiGuesserWordExplanations: undefined, // Clear stale explanations from previous turn
           },
         });
       },
@@ -520,11 +520,9 @@ export const useAppState = create<AppState>()(
         if (!game) return;
         if (game.status === 'gameOver') return;
         if (game.currentPhase !== 'clue') {
-          console.log('Cannot skip clue phase - not in clue phase');
           return;
         }
 
-        console.log('⏰ [TIMER] Clue phase skipped - no clue given in time');
 
         // Create a turn event with no clue (skipped turn)
         const turnEvent = createTurnEvent(
@@ -539,7 +537,8 @@ export const useAppState = create<AppState>()(
           undefined, // intendedTargets
           undefined, // spymasterReasoning
           undefined, // guesserReasoning
-          undefined  // guesserWordConfidences
+          undefined, // guesserWordConfidences
+          undefined  // guesserWordExplanations
         );
 
         const nextTeam: Team = game.currentTeam === 'teamA' ? 'teamB' : 'teamA';
@@ -559,6 +558,7 @@ export const useAppState = create<AppState>()(
             aiPlannedGuesses: [],
             turnShouldEnd: false,
             aiGuesserWordConfidences: undefined, // Clear stale confidence data
+            aiGuesserWordExplanations: undefined, // Clear stale explanations
           },
         });
       },
@@ -572,7 +572,6 @@ export const useAppState = create<AppState>()(
         const { game, gameCancelled } = get();
         if (!game || game.status !== 'playing') return;
         if (gameCancelled) {
-          console.log('🛑 [RIVAL TURN] Game cancelled, aborting');
           return;
         }
         
@@ -595,7 +594,6 @@ export const useAppState = create<AppState>()(
           
           // Check if cancelled during API call
           if (get().gameCancelled) {
-            console.log('🛑 [RIVAL TURN] Game cancelled after clue generation, aborting');
             return;
           }
           
@@ -626,13 +624,11 @@ export const useAppState = create<AppState>()(
           
           // Check if cancelled during wait
           if (get().gameCancelled) {
-            console.log('🛑 [RIVAL TURN] Game cancelled, aborting');
             return;
           }
 
           // If rival AI decided to pass (no guesses), end turn immediately
           if (rivalResult.guesses.length === 0) {
-            console.log('🤖 [RIVAL TURN] Rival AI decided to PASS - no guesses');
             const { game: finalGame, gameCancelled: cancelled } = get();
             if (finalGame && finalGame.status === 'playing' && !cancelled) {
               get().endGuessingPhase();
@@ -646,7 +642,6 @@ export const useAppState = create<AppState>()(
 
             const { game: updatedGame, gameCancelled: cancelled } = get();
             if (!updatedGame || updatedGame.status === 'gameOver' || cancelled) {
-              if (cancelled) console.log('🛑 [RIVAL TURN] Game cancelled during guessing, aborting');
               break;
             }
 
