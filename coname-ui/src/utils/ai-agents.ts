@@ -377,11 +377,6 @@ export async function aiGuesser(
           relatednessMap.set(w.word.toUpperCase(), w.confidence);
         });
         
-        const relatednessEntries = Array.from(relatednessMap.entries()).sort((a, b) => b[1] - a[1]);
-        relatednessEntries.slice(0, 10).forEach(([word, rel]) => {
-          const bar = '█'.repeat(Math.floor(rel / 10)) + '░'.repeat(10 - Math.floor(rel / 10));
-        });
-        
         // Build updated confidence map for ALL unrevealed words
         const finalConfidenceMap: { word: string; confidence: number }[] = [];
         const RELATEDNESS_THRESHOLD = 30; // If 30%+ related to avoidance clue, it's dangerous
@@ -411,19 +406,7 @@ export async function aiGuesser(
         
         if (safeToGuess.length > 0) {
           safeToGuess.sort((a, b) => b.existingConf - a.existingConf);
-          safeToGuess.forEach((w, i) => {
-          });
-        } else {
         }
-        
-        // Log the final confidence state that will be saved
-        finalConfidenceMap
-          .sort((a, b) => b.confidence - a.confidence)
-          .slice(0, 10)
-          .forEach((w, i) => {
-            const marker = w.confidence > 0 ? '✅' : '❓';
-            const bar = '█'.repeat(Math.floor(w.confidence / 10)) + '░'.repeat(10 - Math.floor(w.confidence / 10));
-          });
         
         // Return with ALL word confidences for storage (including zeroed ones)
         return {
@@ -467,9 +450,8 @@ export async function aiGuesser(
     
     let openMistakes = 0;
     
-    if (teamHistory.length === 0) {
-    } else {
-      teamHistory.forEach((turn, i) => {
+    if (teamHistory.length > 0) {
+      teamHistory.forEach((turn) => {
         const expected = turn.clueNumber;
         if (expected <= 0) return; // Skip avoidance/unlimited clues
         
@@ -479,13 +461,8 @@ export async function aiGuesser(
         
         if (missed > 0) {
           openMistakes += missed;
-        } else {
         }
       });
-      
-      if (openMistakes > 0) {
-      } else {
-      }
     }
     
     // Filter to only valid unrevealed words
@@ -514,20 +491,6 @@ export async function aiGuesser(
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, maxGuessesAllowed);
     
-    finalGuesses.forEach((g, i) => {
-      const bar = '█'.repeat(Math.floor(g.confidence / 10)) + '░'.repeat(10 - Math.floor(g.confidence / 10));
-      const sourceInfo = g.source === 'previous' ? ` ← LEFTOVER from "${g.fromClue}"` : '';
-      const isPlusOne = i >= clueNumber && canUse_PlusOne;
-      const marker = isPlusOne ? '➕' : '🎯';
-    });
-    
-    if (finalGuesses.length === 0) {
-    }
-    
-    // Track which are from current vs previous for logging
-    const finalCurrentClue = finalGuesses.filter(g => g.source === 'current');
-    const finalLeftover = finalGuesses.filter(g => g.source === 'previous');
-    
     // Build COMPLETE allWordConfidences for persistent storage
     const aiResponseConfidences = (parsed as unknown as { allWordConfidences?: { word: string; confidence: number }[] }).allWordConfidences || [];
     const completedConfidenceMap = new Map<string, number>();
@@ -551,14 +514,6 @@ export async function aiGuesser(
       confidence
     }));
     
-    // Log the complete confidence map being saved
-    const sortedForSave = [...finalAllWordConfidences].sort((a, b) => b.confidence - a.confidence);
-    sortedForSave.slice(0, 10).forEach((w, i) => {
-      const marker = w.confidence >= 50 ? '✅' : (w.confidence > 0 ? '⚠️' : '❓');
-      const bar = '█'.repeat(Math.floor(w.confidence / 10)) + '░'.repeat(10 - Math.floor(w.confidence / 10));
-    });
-    if (sortedForSave.length > 10) {
-    }
     
     // ═══════════════════════════════════════════════════════════════════════
     // BUILD HUMAN-READABLE REASONING based on what we ACTUALLY chose
@@ -606,24 +561,6 @@ export async function aiGuesser(
       allWordConfidences: finalAllWordConfidences, // Complete map for persistent tracking
       wordExplanations: wordExplanations, // Store for building reasoning based on actual guesses
     };
-
-    if (finalGuesses.length > 0) {
-      finalGuesses.forEach((g, i) => {
-        if (g.source === 'previous') {
-          const decayCalc = `AI: ${g.rawConfidence}% × 0.9^${g.turnsAgo || 1} = ${g.confidence}%`;
-        } else {
-        }
-      });
-      
-      // +1 Rule analysis
-      
-      if (finalLeftover.length > 0) {
-        const leftover = finalLeftover[0];
-        const decayCalc = `${leftover.rawConfidence}% × 0.9^${leftover.turnsAgo || 1} = ${leftover.confidence}%`;
-      } else {
-      }
-    } else {
-    }
 
     return result;
     }
@@ -788,14 +725,6 @@ export async function rivalTurn(
     }
   });
   
-  // Log rival's confidence state
-  const sortedRivalConf = Array.from(rivalConfidenceMap.entries())
-    .sort((a, b) => b[1].confidence - a[1].confidence);
-  sortedRivalConf.slice(0, 10).forEach(([word, data], i) => {
-    const bar = '█'.repeat(Math.floor(data.confidence / 10)) + '░'.repeat(10 - Math.floor(data.confidence / 10));
-    const source = data.fromClue ? ` (from "${data.fromClue}")` : '';
-  });
-
   // Step 2: Generate guesses based on the clue
   const guesserSystemPrompt = buildRivalGuesserSystemPrompt(team);
   const guesserUserPrompt = buildGuesserUserPrompt(
@@ -846,9 +775,6 @@ export async function rivalTurn(
     .filter(([word]) => validWords.includes(word))
     .sort((a, b) => b[1] - a[1]);
   
-  sortedByConfidence.forEach(([word, conf], i) => {
-    const bar = '█'.repeat(Math.floor(conf / 10)) + '░'.repeat(10 - Math.floor(conf / 10));
-  });
   
   // ═══════════════════════════════════════════════════════════════════════
   // +1 RULE CHECK: Only allow +1 if there are "open mistakes" from previous turns
@@ -858,9 +784,8 @@ export async function rivalTurn(
   let rivalOpenMistakes = 0;
   const rivalTeamHistoryForPlusOne = turnHistory.filter(t => t.team === team);
   
-  if (rivalTeamHistoryForPlusOne.length === 0) {
-  } else {
-    rivalTeamHistoryForPlusOne.forEach((turn, i) => {
+  if (rivalTeamHistoryForPlusOne.length > 0) {
+    rivalTeamHistoryForPlusOne.forEach((turn) => {
       const expected = turn.clueNumber;
       if (expected <= 0) return; // Skip avoidance/unlimited clues
       
@@ -870,13 +795,8 @@ export async function rivalTurn(
       
       if (missed > 0) {
         rivalOpenMistakes += missed;
-      } else {
       }
     });
-    
-    if (rivalOpenMistakes > 0) {
-    } else {
-    }
   }
   
   // Pick top N words by confidence - +1 ONLY if there are open mistakes!
@@ -889,11 +809,6 @@ export async function rivalTurn(
     .slice(0, maxRivalGuesses)
     .map(([word]) => word);
   
-  validGuesses.forEach((word, i) => {
-    const conf = confidenceByWord.get(word) || 0;
-    const isPlusOne = i >= number && rivalCanUsePlusOne;
-    const marker = isPlusOne ? '➕' : '🎯';
-  });
 
   // Create final word confidences array
   const finalWordConfidences: { word: string; confidence: number }[] = [];

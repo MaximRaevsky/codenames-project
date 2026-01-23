@@ -70,8 +70,6 @@ The game uses OpenAI's GPT-4o-mini model for AI agents. You need an API key:
 4. Copy the key (starts with `sk-`)
 5. **Important**: Ensure your account has billing set up and credits available
 
-**Estimated Cost**: ~$0.01-0.05 per game (GPT-4o-mini is very cost-effective)
-
 ---
 
 ## Installation

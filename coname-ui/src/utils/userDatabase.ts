@@ -180,7 +180,6 @@ export function saveUser(profile: UserProfile): UserRecord | null {
   const users = getAllUsers();
   const existingUser = users[normalizedEmail];
   const now = Date.now();
-  const isNewUser = !existingUser;
 
   // Determine the summary to use
   const newSummary = profile.llmSummary || existingUser?.llmSummary || '';
@@ -259,8 +258,6 @@ export function updateUserSummary(
     return false;
   }
 
-  const oldSummaryLength = user.llmSummary?.length || 0;
-  
   // Add to history
   const historyEntry: SummaryHistoryEntry = {
     timestamp: Date.now(),
