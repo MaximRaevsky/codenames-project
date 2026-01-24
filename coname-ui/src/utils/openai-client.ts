@@ -5,7 +5,7 @@
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-const MODEL = 'gpt-4o-mini'; // Upgraded from gpt-4o-mini for better performance
+const MODEL = 'gpt-4o-mini'; // Using gpt-4o-mini
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant';

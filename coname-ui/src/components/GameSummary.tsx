@@ -23,9 +23,8 @@ function buildGuesserReasoningFromActualGuesses(
   }
 
   const explanations = actualGuesses.map(word => {
-    const explanation = wordExplanations?.[word] || 
-                       wordExplanations?.[word.toUpperCase()] || 
-                       wordExplanations?.[word.toLowerCase()];
+    // Look up explanation using uppercase key (since ai-agents.ts stores with uppercase)
+    const explanation = wordExplanations?.[word.toUpperCase()];
     if (explanation) {
       // Clean up the explanation - remove redundant phrases and trailing punctuation
       let cleanExplanation = explanation
@@ -33,13 +32,9 @@ function buildGuesserReasoningFromActualGuesses(
         .replace(/^relates to \w+\s*(because\s*)?/i, '')
         .replace(/\.+$/, '') // Remove trailing periods
         .trim();
-      // Ensure first letter is lowercase for natural flow
-      if (cleanExplanation.length > 0) {
-        cleanExplanation = cleanExplanation.charAt(0).toLowerCase() + cleanExplanation.slice(1);
-      }
       return `'${word}' - ${cleanExplanation}`;
     }
-    return `'${word}'`;
+    return `'${word}' - no explanation available`;
   });
 
   if (explanations.length === 1) {
@@ -235,7 +230,7 @@ function TurnSummaryCard({ turn, turnNumber, userRole, userTeam }: TurnSummaryCa
           <div className="mt-4 p-3 bg-blue-50 rounded-lg">
             <p className="text-xs font-medium text-blue-700 mb-1">AI Guesser's Reasoning:</p>
             <p className="text-sm text-blue-900">
-              {buildGuesserReasoningFromActualGuesses(turn.clue, guessedWords, turn.guesserWordExplanations)}
+              {turn.guesserReasoning || buildGuesserReasoningFromActualGuesses(turn.clue, guessedWords, turn.guesserWordExplanations)}
             </p>
           </div>
         )}

@@ -413,6 +413,47 @@ export const useAppState = create<AppState>()(
         // Check for game over
         const gameOverCheck = checkGameOver(newBoard);
         if (gameOverCheck.gameOver) {
+          // Rebuild guesser reasoning based on ACTUAL guesses (not planned)
+          let actualGuesserReasoning = game.aiGuesserReasoning;
+          if (game.settings.playerRole === 'spymaster' && game.aiGuesserWordExplanations && newGuesses.length > 0) {
+            // Extract +1 rule info from original reasoning
+            const plusOneMatch = game.aiGuesserReasoning?.match(/I also guessed '(\w+)' using the \+1 rule from '([^']+)' - ([^.]+)\./i);
+            const plusOneWord = plusOneMatch?.[1]?.toUpperCase();
+            const plusOneClue = plusOneMatch?.[2];
+            const plusOneExplanation = plusOneMatch?.[3];
+            
+            // Build explanations for current clue words only
+            const currentClueWords = newGuesses.filter(w => w.toUpperCase() !== plusOneWord);
+            const explanations = currentClueWords.map(word => {
+              const wordUpper = word.toUpperCase();
+              const explanation = game.aiGuesserWordExplanations?.[wordUpper];
+              if (explanation) {
+                const cleanExplanation = explanation.replace(/^because\s*/i, '').replace(/\.+$/, '').trim();
+                return `'${word}' - ${cleanExplanation}`;
+              }
+              return `'${word}'`;
+            });
+            
+            // Build base reasoning for current clue
+            if (explanations.length === 0) {
+              actualGuesserReasoning = '';
+            } else if (explanations.length === 1) {
+              actualGuesserReasoning = `For the clue '${game.currentClue?.word}', I guessed ${explanations[0]}.`;
+            } else {
+              actualGuesserReasoning = `For the clue '${game.currentClue?.word}', I guessed ${explanations.join('; ')}.`;
+            }
+            
+            // Add +1 rule info if that word was actually guessed
+            if (plusOneWord && plusOneClue && newGuesses.some(w => w.toUpperCase() === plusOneWord)) {
+              const plusOneWordProper = newGuesses.find(w => w.toUpperCase() === plusOneWord);
+              if (plusOneExplanation) {
+                actualGuesserReasoning += ` I also guessed '${plusOneWordProper}' using the +1 rule from '${plusOneClue}' - ${plusOneExplanation}.`;
+              } else {
+                actualGuesserReasoning += ` I also guessed '${plusOneWordProper}' using the +1 rule from '${plusOneClue}'.`;
+              }
+            }
+          }
+
           const turnEvent = createTurnEvent(
             game.currentTeam,
             game.settings.playerRole === 'spymaster' ? 'spymaster' : 'guesser',
@@ -424,7 +465,7 @@ export const useAppState = create<AppState>()(
             newBoard.teamBRemaining,
             game.currentClue?.intendedTargets,
             game.currentClue?.reasoning,
-            game.aiGuesserReasoning,
+            actualGuesserReasoning,
             game.aiGuesserWordConfidences,
             game.aiGuesserWordExplanations
           );
@@ -475,6 +516,50 @@ export const useAppState = create<AppState>()(
           return;
         }
 
+        // Rebuild guesser reasoning based on ACTUAL guesses (not planned)
+        // This ensures we only explain words that were ACTUALLY guessed in the game
+        let actualGuesserReasoning = game.aiGuesserReasoning;
+        if (game.settings.playerRole === 'spymaster' && game.aiGuesserWordExplanations && game.currentTurnGuesses && game.currentTurnGuesses.length > 0) {
+          const actuallyGuessedWords = game.currentTurnGuesses;
+          
+          // Extract +1 rule info from original reasoning
+          const plusOneMatch = game.aiGuesserReasoning?.match(/I also guessed '(\w+)' using the \+1 rule from '([^']+)' - ([^.]+)\./i);
+          const plusOneWord = plusOneMatch?.[1]?.toUpperCase();
+          const plusOneClue = plusOneMatch?.[2];
+          const plusOneExplanation = plusOneMatch?.[3];
+          
+          // Build explanations for current clue words only
+          const currentClueWords = actuallyGuessedWords.filter(w => w.toUpperCase() !== plusOneWord);
+          const explanations = currentClueWords.map(word => {
+            const wordUpper = word.toUpperCase();
+            const explanation = game.aiGuesserWordExplanations?.[wordUpper];
+            if (explanation) {
+              const cleanExplanation = explanation.replace(/^because\s*/i, '').replace(/\.+$/, '').trim();
+              return `'${word}' - ${cleanExplanation}`;
+            }
+            return `'${word}'`;
+          });
+          
+          // Build base reasoning for current clue
+          if (explanations.length === 0) {
+            actualGuesserReasoning = '';
+          } else if (explanations.length === 1) {
+            actualGuesserReasoning = `For the clue '${game.currentClue?.word}', I guessed ${explanations[0]}.`;
+          } else {
+            actualGuesserReasoning = `For the clue '${game.currentClue?.word}', I guessed ${explanations.join('; ')}.`;
+          }
+          
+          // Add +1 rule info if that word was actually guessed
+          if (plusOneWord && plusOneClue && actuallyGuessedWords.some(w => w.toUpperCase() === plusOneWord)) {
+            const plusOneWordProper = actuallyGuessedWords.find(w => w.toUpperCase() === plusOneWord);
+            if (plusOneExplanation) {
+              actualGuesserReasoning += ` I also guessed '${plusOneWordProper}' using the +1 rule from '${plusOneClue}' - ${plusOneExplanation}.`;
+            } else {
+              actualGuesserReasoning += ` I also guessed '${plusOneWordProper}' using the +1 rule from '${plusOneClue}'.`;
+            }
+          }
+        }
+
         const turnEvent = createTurnEvent(
           game.currentTeam,
           game.settings.playerRole === 'spymaster' ? 'spymaster' : 'guesser',
@@ -486,7 +571,7 @@ export const useAppState = create<AppState>()(
           game.board.teamBRemaining,
           game.currentClue?.intendedTargets,  // Store what the spymaster intended
           game.currentClue?.reasoning,        // Store spymaster's reasoning
-          game.aiGuesserReasoning,            // Store AI guesser's reasoning (if any)
+          actualGuesserReasoning,             // Store AI guesser's reasoning (rebuilt for actual guesses)
           game.aiGuesserWordConfidences,      // Store AI guesser's word confidences for persistence
           game.aiGuesserWordExplanations      // Store AI guesser's word explanations
         );
@@ -616,6 +701,7 @@ export const useAppState = create<AppState>()(
               aiPlannedGuesses: rivalResult.guesses,
               turnShouldEnd: false,
               aiGuesserWordConfidences: rivalResult.guesserWordConfidences, // Store rival's confidences
+              aiGuesserWordExplanations: rivalResult.guesserWordExplanations, // Store rival's explanations
             },
           });
 

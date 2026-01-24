@@ -22,9 +22,35 @@ export function buildSpymasterSystemPrompt(
   profile?: UserProfile
 ): string {
   const teamName = team === 'teamA' ? 'Red Team' : 'Blue Team';
-  const rivalTeamName = team === 'teamA' ? 'Blue Team' : 'Red Team';
 
   let prompt = `# CODENAMES - ${teamName} SPYMASTER
+
+🚨 🚨 🚨 YOU ARE FAILING - YOU MUST CHECK EVERY WORD 🚨 🚨 🚨
+
+**YOU KEEP GIVING CLUES THAT CONNECT TO RIVAL/ASSASSIN WORDS!**
+
+This means you are NOT actually checking all words on the board!
+
+**YOU MUST LITERALLY DO THIS FOR EVERY CLUE:**
+
+1. Think of a clue
+2. **STOP - DO NOT PROCEED WITHOUT CHECKING**
+3. Read the ASSASSIN word out loud to yourself
+4. Ask: "Does my clue connect to ASSASSIN?" If YES → REJECT AND START OVER
+5. Read EACH RIVAL WORD one by one
+6. For EACH rival word, ask: "Does my clue connect to THIS word?" 
+7. If YES for even ONE rival word → REJECT AND START OVER
+8. Read EACH NEUTRAL WORD
+9. Ask: "Do any neutrals connect as strongly as my targets?" If YES → REJECT
+10. ONLY if you pass ALL checks above can you give the clue
+
+**CRITICAL RULE:**
+If you give a clue and the guesser chooses a RIVAL or ASSASSIN word, it means YOU FAILED to check that word properly.
+
+**THE GUESSER WILL THINK OF EVERY WORD THAT CONNECTS TO YOUR CLUE!**
+Not just the ones you intended!
+
+⚠️ CHECK EVERY SINGLE WORD - NO EXCEPTIONS - NO SHORTCUTS!
 
 ## Game Rules
 - Give ONE-WORD clues + a number (how many words connect)
@@ -32,18 +58,13 @@ export function buildSpymasterSystemPrompt(
 - ASSASSIN = instant loss | Rival words = helps opponent | Neutral = ends turn
 
 ## Your Goal
-Give CLEAR clues that your guesser will easily understand, while AVOIDING all dangerous words.
+Give CLEAR, UNAMBIGUOUS clues that make your guesser rate your target words at the TOP while keeping dangerous words at the BOTTOM. A perfect clue = YOUR words get top ratings, dangerous words get low ratings.
 
-## Key Principles
-1. **CLARITY > QUANTITY**: A clear clue for 2 words beats a vague clue for 3
-2. **SCAN ALL WORDS**: Before any clue, check it doesn't connect to assassin/rival words
-3. **NEVER REPEAT FAILED CLUES**: If a clue led to wrong guesses before, don't use it again
-4. **NEW CLUE EACH TURN**: Always give a fresh clue - don't repeat the same clue from earlier turns unless you're absolutely certain it will work this time
-
-## Danger Priority
-1. 🚫 ASSASSIN - Never give clues that could lead here
-2. ⚠️ RIVAL WORDS (${rivalTeamName}) - Avoid! Each rival guess = free point for opponent
-3. ⚡ NEUTRAL - Ends turn
+## Key Strategy Principles
+1. **THINK LIKE THE GUESSER**: They don't know your targets - they'll consider ALL words that connect to your clue
+2. **CLARITY FOR YOUR WORDS**: Target words should have STRONG, OBVIOUS connections to your clue
+3. **CONNECT MULTIPLE CLEAR WORDS**: If 2+ words have CLEAR, STRONG connections (and NO dangerous words involved), include them all
+4. **QUALITY > QUANTITY**: A specific, safe clue for 2 words beats a broad, risky clue for 3 words
 
 ## Clue Rules (Violations = Invalid)
 - Must be ONE word (hyphens OK, spaces NOT)
@@ -79,6 +100,7 @@ export function buildSpymasterUserPrompt(
 ): string {
   const teamCategory: CardCategory = team;
   const rivalCategory: CardCategory = team === 'teamA' ? 'teamB' : 'teamA';
+  const rivalTeamName = team === 'teamA' ? 'Blue Team' : 'Red Team';
 
   // Separate revealed and unrevealed cards
   const yourWords = board.cards
@@ -108,20 +130,21 @@ export function buildSpymasterUserPrompt(
 - Rival team: ${team === 'teamA' ? board.teamBRemaining : board.teamARemaining} words left to find
 ${board.teamARemaining < board.teamBRemaining ? (team === 'teamA' ? '→ You are WINNING!' : '→ You are BEHIND - consider bolder clues') : (team === 'teamB' ? '→ You are WINNING!' : '→ You are BEHIND - consider bolder clues')}
 
-## ✅ YOUR TEAM'S UNREVEALED WORDS (Target these!):
-${yourWords.join(', ')}
-
-## 🚫 ASSASSIN - INSTANT LOSS IF GUESSED:
+## 🚫 ASSASSIN - INSTANT LOSS IF GUESSED!
 >>> ${assassinWord} <<<
-(NEVER give a clue that could lead to this word!)
+❌ If your clue connects to this word in ANY way → REJECT IT IMMEDIATELY!
 
-## ⚠️ RIVAL'S UNREVEALED WORDS - MUST AVOID! Guessing these HELPS OPPONENT!
+## ⚠️ RIVAL'S UNREVEALED WORDS (${rivalTeamName}) - CHECK EACH ONE!
 >>> ${rivalWords.join(', ')} <<<
-⚠️ CHECK: Does your clue connect to ANY of these? If yes → FIND A DIFFERENT CLUE!
-⚠️ Each rival word guessed = FREE POINT for opponent + your turn ends
+❌ You MUST check EVERY word above! If your clue connects to even ONE → REJECT IT!
+⚠️ Each rival word guessed = FREE POINT for opponent
 
-## ⚡ NEUTRAL WORDS (Avoid - ends turn):
+## ⚡ NEUTRAL WORDS - AVOID - CHECK THIRD!
 ${neutralWords.join(', ')}
+⚠️ These end your turn immediately - avoid unless your team words are MUCH stronger connections
+
+## ✅ YOUR TEAM'S UNREVEALED WORDS (Target these):
+${yourWords.join(', ')}
 
 ## ALREADY REVEALED THIS GAME:
 ${revealedWords.length > 0 ? revealedWords.join(', ') : 'None yet - this is the first turn'}
@@ -153,11 +176,41 @@ ${rivalTeamHistory.length > 0 ? rivalTeamHistory.map(t =>
 ## YOUR TASK
 Give a ONE-WORD clue and number.
 
-Before choosing a clue:
-1. Scan ALL words on the board (team, rival, assassin, neutral)
-2. Make sure your clue doesn't connect to any dangerous words
-3. Make sure you're NOT repeating a clue from previous turns
-4. Verify your clue follows the rules (no board words, roots, substrings, plurals)
+⚠️ MANDATORY WORD-BY-WORD CHECK - DO EVERY STEP!
+
+**YOU MUST GO THROUGH THIS EXACT PROCESS:**
+
+1. **PROPOSE YOUR CLUE**: Write down your clue
+
+2. **CHECK ASSASSIN**:
+   - Read the assassin word
+   - Ask: "Does my clue connect to this word?"
+   - If YES → STOP, REJECT, start over
+
+3. **CHECK EVERY RIVAL WORD**:
+   - Take the list of rival words
+   - Read the FIRST word
+   - Ask: "Does my clue connect to this word?"
+   - If YES → STOP, REJECT, start over
+   - If NO → move to NEXT word
+   - Repeat for EVERY word in the list
+   - You MUST check ALL of them!
+
+4. **CHECK NEUTRAL WORDS**:
+   - For each neutral, ask: "Does it connect as strongly as my targets?"
+   - If YES to any → REJECT
+
+5. **VERIFY**:
+   - Are your targets the ONLY strong connections on the board?
+   - If NO → REJECT and find a more specific clue
+
+6. **HONESTY CHECK**:
+   - Did you actually check EVERY word above?
+   - Did you rate connections honestly?
+   - If you skipped any word or lied about connections → START OVER
+
+🚫 If ANY dangerous word connects → REJECT THE CLUE!
+🚫 You MUST check EVERY word - no shortcuts!
 
 ## Response Format (ALL FIELDS REQUIRED)
 {
@@ -173,9 +226,25 @@ Before choosing a clue:
 
 ⚠️ REQUIRED FIELDS:
 - "targetWords": MUST list the EXACT board words you're targeting (copy them exactly from the board)
-- "number": MUST match the length of targetWords
-- "dangerCheck": Include assassin + ALL rival words with risk % (0-100). If any > 25%, find different clue
-- "reasoning": Why this clue is clear and safe
+- "number": MUST match the length of targetWords. Aim for 2-3 words when all have STRONG, CLEAR connections AND no dangerous words
+- "dangerCheck": MANDATORY! You MUST include EVERY word below with honest risk % (0-100):
+  - ASSASSIN word
+  - EVERY SINGLE RIVAL WORD (do not skip any!)
+  - ALL NEUTRAL WORDS
+  
+  **HOW TO RATE EACH WORD:**
+  - Ask: "Would a human think of this word when hearing my clue?"
+  - If there's ANY connection, rate it AT LEAST 40%
+  - If it's a strong connection, rate it 80%+
+  - BE BRUTALLY HONEST - do not underestimate!
+  
+  **REJECTION RULES:**
+  - If ASSASSIN > 25% → REJECT THIS CLUE
+  - If ANY RIVAL > 25% → REJECT THIS CLUE
+  - If NEUTRAL > 35% and your targets aren't much higher → REJECT
+  - If a dangerous word has a rating comparable to your targets → REJECT
+
+- "reasoning": Explain: "I went through EVERY word on the board. My targets are the ONLY words that connect strongly. [List specific dangerous words and why they don't connect]"
 
 CRITICAL: If targetWords is empty or missing, your response is INVALID!
 `;
@@ -285,19 +354,17 @@ PRIORITY ORDER:
 ## Response Format (ALL FIELDS REQUIRED!)
 {
   "allWordConfidences": [
-    {"word": "WORD1", "confidence": 95},
-    {"word": "WORD2", "confidence": 70},
-    {"word": "WORD3", "confidence": 15},
-    ...MUST include ALL available words on the board!
+    {"word": "BUG", "confidence": 95, "explanation": "Butterflies are a type of bug"},
+    {"word": "LUCK", "confidence": 70, "explanation": "Butterflies are symbols of good luck"},
+    {"word": "CAR", "confidence": 15, "explanation": "Highest remaining option after BUG and LUCK"},
+    {"word": "PIANO", "confidence": 5, "explanation": "Weak connection through wings/keys metaphor"},
+    ...MUST include ALL available words on the board with explanations!
   ],
   "guesses": [
-    {"word": "WORD1", "confidence": 95, "source": "current"},
-    {"word": "WORD2", "confidence": 70, "source": "current"}
+    {"word": "BUG", "confidence": 95, "source": "current"},
+    {"word": "LUCK", "confidence": 70, "source": "current"},
+    {"word": "CAR", "confidence": 15, "source": "current"}
   ],
-  "wordExplanations": {
-    "WORD1": "brief explanation of why this word relates to the clue",
-    "WORD2": "brief explanation of why this word relates to the clue"
-  },
   "reasoning": "Overall summary of your guessing strategy"
 }
 
@@ -306,16 +373,25 @@ You MUST rate EVERY SINGLE available word from 0-100. This is required for the g
 Do NOT skip any words. Include ALL words even if confidence is 0%.
 
 IMPORTANT:
-1. "allWordConfidences" - Rate EVERY available word (0-100):
+1. "allWordConfidences" - Rate EVERY available word (0-100) AND include "explanation" field:
    - For NORMAL clues: How likely this word is YOUR team's word based on the clue
    - For AVOIDANCE clues (number=0): How RELATED this word is to the avoidance clue word!
      ⚠️ Example: If clue is "LOCK 0", rate KEY at 90%+ because key and lock are HIGHLY related!
      The higher the relatedness, the more DANGEROUS - these words should be avoided!
+   - **CRITICAL**: Each word object MUST include "explanation" field with a meaningful reason
+   - Format: {"word": "CANADA", "confidence": 95, "explanation": "Ottawa is Canada's capital"}
+   - Use proper capitalization (proper nouns, clue words, etc.)
+   
+   **FOR WORDS YOU ACTUALLY GUESS (even with low confidence):**
+   - You MUST explain WHY you chose this word despite low confidence
+   - Examples: "CAR was the next highest after BUG and LUCK", "Trying CAR as it relates to transportation", "CAR has the highest remaining confidence at 15%"
+   - NEVER say "weak connection, no clear relation" - if you chose it, explain your reasoning!
+   - If using +1 rule, mention the previous clue it connects to
+   
+   **FOR WORDS YOU DON'T GUESS:**
+   - Can say "Weak connection through X", "Could relate via Y but risky"
+   - Keep explanations brief (5-15 words), conversational
 2. "guesses" - Only the words you actually want to guess (in order)
-3. "wordExplanations" - For EACH guessed word, provide a BRIEF human-readable explanation:
-   - Explain the semantic connection (e.g., "ALIEN relates to SPACE because aliens come from outer space")
-   - Keep it natural and conversational, like explaining to a friend
-   - For +1 leftover words, mention which previous clue it relates to
 
 FIELDS for guesses:
 - "source": "current" (matches current clue) or "previous" (leftover from +1 rule)

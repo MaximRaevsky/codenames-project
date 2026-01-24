@@ -90,7 +90,7 @@ export async function aiSpymaster(
     }
 
     const response = await callAgent(systemPrompt, userPrompt, {
-      temperature: Math.min(1.0 + (attempt - 1) * 0.1, 1.3), // Higher temp for more creative clues
+      temperature: Math.min(0.3 + (attempt - 1) * 0.1, 0.6), // Extremely low temp for methodical checking
       maxTokens: 4096,
       jsonMode: true,
     });
@@ -140,9 +140,13 @@ export async function aiSpymaster(
       continue;
     }
     
+    // BUG FIX: Cap the number at remaining team words (don't give clue for 2 when only 1 remains)
+    const remainingTeamWords = teamWords.length;
+    const cappedNumber = Math.min(parsed.number, remainingTeamWords);
+    
     const result = {
       clue: clueCandidate,
-      number: Math.max(1, parsed.number),
+      number: Math.max(1, cappedNumber),
       reasoning: parsed.reasoning,
       targetWords: finalTargetWords.map(w => w.toUpperCase()), // Normalize to uppercase
     };
@@ -180,11 +184,12 @@ export async function aiGuesser(
   // STEP 1: BUILD PERSISTENT WORD CONFIDENCE MAP FROM ALL PREVIOUS TURNS
   // ═══════════════════════════════════════════════════════════════════════
   
-  // Initialize confidence map for all unrevealed words
+  // Initialize confidence map for all unrevealed words (now includes explanations!)
   const wordConfidenceMap: Map<string, { 
     confidence: number; 
     fromClue: string; 
     fromTurn: number;
+    explanation?: string;
   }> = new Map();
   
   // Initialize all words at 0%
@@ -192,7 +197,8 @@ export async function aiGuesser(
     wordConfidenceMap.set(word.toUpperCase(), { 
       confidence: 0, 
       fromClue: '', 
-      fromTurn: 0
+      fromTurn: 0,
+      explanation: undefined
     });
   });
   
@@ -220,13 +226,17 @@ export async function aiGuesser(
         // Apply decay to stored confidence
         const decayedConfidence = Math.round(wc.confidence * decayMultiplier);
         
+        // Get the original explanation from that turn (if available)
+        const originalExplanation = turn.guesserWordExplanations?.[wordUpper];
+        
         // Only update if this gives higher confidence
         const existing = wordConfidenceMap.get(wordUpper);
         if (!existing || decayedConfidence > existing.confidence) {
           wordConfidenceMap.set(wordUpper, {
             confidence: decayedConfidence,
             fromClue: turn.clue,
-            fromTurn: turnNumber
+            fromTurn: turnNumber,
+            explanation: originalExplanation
           });
         }
       });
@@ -290,37 +300,71 @@ export async function aiGuesser(
 
     const parsed = parseAgentJson<AgentGuesserResponse>(response);
     
-    // Log ALL word confidences for tracking
-    const allWordConfidences = (parsed as unknown as { allWordConfidences?: { word: string; confidence: number }[] }).allWordConfidences;
+    // Log ALL word confidences for tracking (now includes explanations!)
+    const allWordConfidences = (parsed as unknown as { allWordConfidences?: { word: string; confidence: number; explanation?: string }[] }).allWordConfidences;
+    
+    // Extract explanations from allWordConfidences into a map
+    // IMPORTANT: For words from previous turns, use ORIGINAL explanation, not current evaluation
+    const explanationsMap: Record<string, string> = {};
+    
+    // First, populate with stored explanations from previous turns
+    wordConfidenceMap.forEach((data, word) => {
+      if (data.explanation) {
+        explanationsMap[word] = data.explanation;
+      }
+    });
+    
+    // Then, overlay with current turn explanations (which will override for current clue words)
+    if (allWordConfidences && Array.isArray(allWordConfidences)) {
+      allWordConfidences.forEach(w => {
+        const wordUpper = w.word.toUpperCase();
+        const stored = wordConfidenceMap.get(wordUpper);
+        const storedConf = stored?.confidence || 0;
+        const currentConf = w.confidence;
+        
+        // Only use current explanation if current confidence is higher
+        // This ensures bonus words keep their ORIGINAL explanation from when they had high confidence
+        if (w.explanation && currentConf >= storedConf) {
+          explanationsMap[wordUpper] = w.explanation;
+        }
+      });
+    }
+    
     if (allWordConfidences && Array.isArray(allWordConfidences) && allWordConfidences.length > 0) {
       
       // ═══════════════════════════════════════════════════════════════════════
       // MERGE: Take HIGHER of current clue confidence vs stored confidence
+      // IMPORTANT: Also preserve the ORIGINAL explanation from whichever source we choose
       // ═══════════════════════════════════════════════════════════════════════
       
-      const mergedConfidences: { word: string; confidence: number; source: string; fromClue: string }[] = [];
+      const mergedConfidences: { word: string; confidence: number; source: string; fromClue: string; originalExplanation?: string }[] = [];
       
       allWordConfidences.forEach(w => {
         const wordUpper = w.word.toUpperCase();
         const currentConf = w.confidence;
+        const currentExplanation = explanationsMap[wordUpper]; // From current clue
         const stored = wordConfidenceMap.get(wordUpper);
         const storedConf = stored?.confidence || 0;
         const storedClue = stored?.fromClue || '';
+        const storedExplanation = stored?.explanation; // From previous clue
         
         let finalConf: number;
         let source: string;
         let fromClue: string;
+        let originalExplanation: string | undefined;
         
         if (storedConf > currentConf) {
-          // Stored is higher - use it
+          // Stored is higher - use it WITH its original explanation
           finalConf = storedConf;
           source = 'stored';
           fromClue = storedClue;
+          originalExplanation = storedExplanation;
         } else if (currentConf > storedConf && currentConf > 0) {
-          // Current is higher - use it
+          // Current is higher - use it WITH current explanation
           finalConf = currentConf;
           source = 'current';
           fromClue = clue;
+          originalExplanation = currentExplanation;
           if (storedConf > 0) {
           }
         } else {
@@ -328,9 +372,10 @@ export async function aiGuesser(
           finalConf = currentConf;
           source = 'current';
           fromClue = clue;
+          originalExplanation = currentExplanation;
         }
         
-        mergedConfidences.push({ word: w.word, confidence: finalConf, source, fromClue });
+        mergedConfidences.push({ word: w.word, confidence: finalConf, source, fromClue, originalExplanation });
       });
       
       
@@ -353,11 +398,11 @@ export async function aiGuesser(
       
       // Select top words based on clue number (with minimum confidence threshold)
       const MINIMUM_CONFIDENCE = 10; // Don't guess words below 10%
-      const maxGuesses = clueNumber === -1 || clueNumber === 0 ? sortedValidWords.length : clueNumber + 1; // +1 for leftover rule
       
+      // For normal clues, we'll need to separate current from previous for proper +1 handling
+      // Take all valid words for now, and we'll apply smart selection later based on source
       const selectedFromConfidence = sortedValidWords
-        .filter(w => w.confidence >= MINIMUM_CONFIDENCE)
-        .slice(0, maxGuesses);
+        .filter(w => w.confidence >= MINIMUM_CONFIDENCE);
       
       // ═══════════════════════════════════════════════════════════════════════
       // AVOIDANCE CLUE (0) HANDLING: ZERO OUT related words, keep unrelated
@@ -431,6 +476,7 @@ export async function aiGuesser(
       source: 'current' | 'previous';
       fromClue?: string;
       turnsAgo?: number;
+      originalExplanation?: string; // Explanation from when this confidence was set
     }
     
     // Build confidence-based guesses from sorted confidences
@@ -440,7 +486,8 @@ export async function aiGuesser(
       rawConfidence: w.confidence,
       source: (w.source === 'stored' ? 'previous' : 'current') as 'current' | 'previous',
       fromClue: w.fromClue,
-      turnsAgo: w.source === 'stored' ? 1 : undefined
+      turnsAgo: w.source === 'stored' ? 1 : undefined,
+      originalExplanation: w.originalExplanation
     }));
     
     // ═══════════════════════════════════════════════════════════════════════
@@ -478,18 +525,36 @@ export async function aiGuesser(
         rawConfidence: g.rawConfidence,
         source: g.source,
         fromClue: g.fromClue,
-        turnsAgo: g.turnsAgo
+        turnsAgo: g.turnsAgo,
+        originalExplanation: g.originalExplanation
       }));
     
     // +1 ONLY if there are open mistakes from previous turns!
     const canUse_PlusOne = openMistakes > 0;
-    const maxGuessesAllowed = clueNumber === -1 || clueNumber === 0 
-      ? validGuesses.length 
-      : canUse_PlusOne ? clueNumber + 1 : clueNumber; // +1 ONLY if open mistakes exist
     
-    const finalGuesses = validGuesses
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, maxGuessesAllowed);
+    let finalGuesses: GuessDetail[] = [];
+    
+    if (clueNumber === -1 || clueNumber === 0) {
+      // Unlimited or avoidance - take all valid guesses sorted by confidence
+      finalGuesses = validGuesses.sort((a, b) => b.confidence - a.confidence);
+    } else {
+      // Normal clue: prioritize CURRENT clue words up to clueNumber, then add +1 from PREVIOUS if allowed
+      const currentClueGuesses = validGuesses
+        .filter(g => g.source === 'current')
+        .sort((a, b) => b.confidence - a.confidence);
+      
+      const previousClueGuesses = validGuesses
+        .filter(g => g.source === 'previous')
+        .sort((a, b) => b.confidence - a.confidence);
+      
+      // Take up to clueNumber from current clue
+      finalGuesses = currentClueGuesses.slice(0, clueNumber);
+      
+      // Add ONE from previous ONLY if: (1) we can use +1, AND (2) we have previous guesses available
+      if (canUse_PlusOne && previousClueGuesses.length > 0) {
+        finalGuesses.push(previousClueGuesses[0]);
+      }
+    }
     
     // Build COMPLETE allWordConfidences for persistent storage
     const aiResponseConfidences = (parsed as unknown as { allWordConfidences?: { word: string; confidence: number }[] }).allWordConfidences || [];
@@ -521,17 +586,20 @@ export async function aiGuesser(
     const currentClueGuessesForReasoning = finalGuesses.filter(g => g.source === 'current');
     const leftoverGuessesForReasoning = finalGuesses.filter(g => g.source === 'previous');
     
-    // Get word explanations from AI response (if available)
-    const wordExplanations = (parsed as unknown as { wordExplanations?: Record<string, string> }).wordExplanations || {};
-    
+    // Use explanations from allWordConfidences (explanationsMap built above)
     let accurateReasoning = '';
     
     // Explain current clue guesses with semantic reasoning (no percentages)
     if (currentClueGuessesForReasoning.length > 0) {
       const guessExplanations = currentClueGuessesForReasoning.map(g => {
-        const explanation = wordExplanations[g.word] || wordExplanations[g.word.toUpperCase()] || wordExplanations[g.word.toLowerCase()];
+        const explanation = explanationsMap[g.word.toUpperCase()];
         if (explanation) {
-          return `'${g.word}' because ${explanation.toLowerCase().replace(/^because\s*/i, '')}`;
+          // Clean up the explanation
+          let cleanExplanation = explanation
+            .replace(/^because\s*/i, '')
+            .replace(/\.+$/, '')
+            .trim();
+          return `'${g.word}' - ${cleanExplanation}`;
         }
         return `'${g.word}'`;
       });
@@ -546,9 +614,12 @@ export async function aiGuesser(
     // Only mention +1 rule if it was actually used
     if (leftoverGuessesForReasoning.length > 0) {
       const leftover = leftoverGuessesForReasoning[0];
-      const leftoverExplanation = wordExplanations[leftover.word] || wordExplanations[leftover.word.toUpperCase()] || wordExplanations[leftover.word.toLowerCase()];
+      // CRITICAL: Use the ORIGINAL explanation from when this word had high confidence
+      // NOT the current clue's explanation (which would be wrong!)
+      const leftoverExplanation = leftover.originalExplanation;
       if (leftoverExplanation) {
-        accurateReasoning += ` I also guessed '${leftover.word}' using the +1 rule - it was related to the previous clue '${leftover.fromClue}'.`;
+        const cleanLeftover = leftoverExplanation.replace(/^because\s*/i, '').replace(/\.+$/, '').trim();
+        accurateReasoning += ` I also guessed '${leftover.word}' using the +1 rule from '${leftover.fromClue}' - ${cleanLeftover}.`;
       } else {
         accurateReasoning += ` I also guessed '${leftover.word}' using the +1 rule from the previous clue '${leftover.fromClue}'.`;
       }
@@ -559,7 +630,7 @@ export async function aiGuesser(
       guesses: finalGuesses.map(g => g.word),
       reasoning: accurateReasoning,
       allWordConfidences: finalAllWordConfidences, // Complete map for persistent tracking
-      wordExplanations: wordExplanations, // Store for building reasoning based on actual guesses
+      wordExplanations: explanationsMap, // Store explanations for all evaluated words
     };
 
     return result;
@@ -586,6 +657,7 @@ export interface RivalTurnResult {
   reasoning?: string;
   intendedTargets?: string[];
   guesserWordConfidences?: { word: string; confidence: number }[];
+  guesserWordExplanations?: Record<string, string>;
 }
 
 /**
@@ -625,7 +697,7 @@ export async function rivalTurn(
     }
 
     const clueResponse = await callAgent(spymasterSystemPrompt, spymasterUserPrompt, {
-      temperature: Math.min(0.8 + (attempt - 1) * 0.1, 1.2),
+      temperature: Math.min(0.3 + (attempt - 1) * 0.1, 0.6),
       maxTokens: 4096,
       jsonMode: true,
     });
@@ -650,7 +722,12 @@ export async function rivalTurn(
     
     // Valid clue found!
     clue = clueCandidate;
-    number = Math.max(1, clueData.number);
+    
+    // BUG FIX: Cap the number at remaining team words (don't give clue for 2 when only 1 remains)
+    const remainingTeamWords = rivalWords.length;
+    const cappedNumber = Math.min(clueData.number, remainingTeamWords);
+    number = Math.max(1, cappedNumber);
+    
     clueReasoning = clueData.reasoning || 'No reasoning provided';
   }
 
@@ -748,7 +825,15 @@ export async function rivalTurn(
   // The guesser doesn't know categories - it picks based on clue relevance ONLY
   // ═══════════════════════════════════════════════════════════════════════
   
-  const allWordConfidences = (guessData as unknown as { allWordConfidences?: { word: string; confidence: number }[] }).allWordConfidences || [];
+  const allWordConfidences = (guessData as unknown as { allWordConfidences?: { word: string; confidence: number; explanation?: string }[] }).allWordConfidences || [];
+  
+  // Extract explanations from allWordConfidences
+  const rivalExplanationsMap: Record<string, string> = {};
+  allWordConfidences.forEach(w => {
+    if (w.explanation) {
+      rivalExplanationsMap[w.word.toUpperCase()] = w.explanation;
+    }
+  });
   
   
   // Get valid unrevealed words
@@ -756,24 +841,26 @@ export async function rivalTurn(
     .filter(c => !c.revealed)
     .map(c => c.word.toUpperCase());
   
-  // Build confidence map from AI's allWordConfidences
-  const confidenceByWord = new Map<string, number>();
+  // Build confidence map from AI's allWordConfidences WITH SOURCE TRACKING
+  const confidenceByWord = new Map<string, { confidence: number; source: 'current' | 'previous' }>();
   allWordConfidences.forEach(wc => {
-    confidenceByWord.set(wc.word.toUpperCase(), wc.confidence);
+    confidenceByWord.set(wc.word.toUpperCase(), { confidence: wc.confidence, source: 'current' });
   });
   
-  // Merge with stored confidences (take higher)
+  // Merge with stored confidences (take higher, and track source)
   rivalConfidenceMap.forEach((data, word) => {
-    const currentConf = confidenceByWord.get(word) || 0;
+    const currentData = confidenceByWord.get(word);
+    const currentConf = currentData?.confidence || 0;
     if (data.confidence > currentConf && !data.isZeroedByOpponent) {
-      confidenceByWord.set(word, data.confidence);
+      confidenceByWord.set(word, { confidence: data.confidence, source: 'previous' });
     }
   });
   
   // Sort all words by confidence descending
   const sortedByConfidence = Array.from(confidenceByWord.entries())
     .filter(([word]) => validWords.includes(word))
-    .sort((a, b) => b[1] - a[1]);
+    .map(([word, data]) => ({ word, confidence: data.confidence, source: data.source }))
+    .sort((a, b) => b.confidence - a.confidence);
   
   
   // ═══════════════════════════════════════════════════════════════════════
@@ -800,20 +887,29 @@ export async function rivalTurn(
   }
   
   // Pick top N words by confidence - +1 ONLY if there are open mistakes!
+  // IMPORTANT: Prioritize CURRENT clue words up to number, then add +1 from PREVIOUS if allowed
   const MINIMUM_CONFIDENCE = 10;
   const rivalCanUsePlusOne = rivalOpenMistakes > 0;
-  const maxRivalGuesses = rivalCanUsePlusOne ? number + 1 : number;
   
-  const validGuesses = sortedByConfidence
-    .filter(([, conf]) => conf >= MINIMUM_CONFIDENCE)
-    .slice(0, maxRivalGuesses)
-    .map(([word]) => word);
+  const currentClueWords = sortedByConfidence
+    .filter(w => w.source === 'current' && w.confidence >= MINIMUM_CONFIDENCE);
+  
+  const previousClueWords = sortedByConfidence
+    .filter(w => w.source === 'previous' && w.confidence >= MINIMUM_CONFIDENCE);
+  
+  // Take up to 'number' from current clue
+  const validGuesses: string[] = currentClueWords.slice(0, number).map(w => w.word);
+  
+  // Add ONE from previous ONLY if: (1) we can use +1, AND (2) we have previous words available
+  if (rivalCanUsePlusOne && previousClueWords.length > 0) {
+    validGuesses.push(previousClueWords[0].word);
+  }
   
 
   // Create final word confidences array
   const finalWordConfidences: { word: string; confidence: number }[] = [];
-  confidenceByWord.forEach((confidence, word) => {
-    finalWordConfidences.push({ word, confidence });
+  confidenceByWord.forEach((data, word) => {
+    finalWordConfidences.push({ word, confidence: data.confidence });
   });
 
   // Get intended targets from the spymaster response
@@ -826,6 +922,7 @@ export async function rivalTurn(
     reasoning: clueReasoning,
     intendedTargets,
     guesserWordConfidences: finalWordConfidences,
+    guesserWordExplanations: rivalExplanationsMap,
   };
 
   return result;
