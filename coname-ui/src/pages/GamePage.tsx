@@ -338,7 +338,7 @@ export function GamePage() {
   const currentTeamColor = isUserTurn ? userTeamColor : rivalTeamColor;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50">
+    <div key={game.id} className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50">
       {/* Background decoration */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-50 rounded-full blur-3xl opacity-50" />

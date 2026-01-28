@@ -105,10 +105,10 @@ export const useAppState = create<AppState>()(
       currentPage: 'welcome',
       setCurrentPage: (page) => set({ currentPage: page }),
       
-      // Game cancellation
+      // Game cancellation - clear game so no stale state can reappear or get persisted
       gameCancelled: false,
       cancelGame: () => {
-        set({ gameCancelled: true });
+        set({ gameCancelled: true, game: null });
       },
       
       // Logout - clear profile and reset state
@@ -252,6 +252,7 @@ export const useAppState = create<AppState>()(
       submitClue: async (clue, number, intendedTargets) => {
         const { game, profile, gameCancelled } = get();
         if (!game || gameCancelled) return;
+        const gameId = game.id; // Guard: only apply async result if still same game
 
         // Set initial state with loading
         const userTeam = game.settings.playerTeam === 'red' ? 'teamA' : 'teamB';
@@ -283,11 +284,10 @@ export const useAppState = create<AppState>()(
             game.turnHistory
           );
           
-          // Check if cancelled during API call
-          if (get().gameCancelled) return;
-          
-          // Update with AI guesses, reasoning, word confidences, and explanations
-          const currentGame = get().game;
+          // Only apply if still same game (user didn't cancel and start a new game)
+          const current = get();
+          if (current.gameCancelled || current.game?.id !== gameId) return;
+          const currentGame = current.game;
           if (currentGame && currentGame.currentClue?.word === clue) {
             set({
               game: {
@@ -301,12 +301,13 @@ export const useAppState = create<AppState>()(
           }
         } catch (error) {
           console.error('Error getting AI guesses:', error);
-          // Fallback: pick random team words
+          const current = get();
+          if (current.gameCancelled || current.game?.id !== gameId) return;
           const teamWords = game.board.cards
             .filter(c => c.category === userTeam && !c.revealed)
             .map(c => c.word);
           const shuffled = [...teamWords].sort(() => Math.random() - 0.5);
-          const currentGame = get().game;
+          const currentGame = current.game;
           if (currentGame) {
             set({
               game: {
@@ -323,6 +324,7 @@ export const useAppState = create<AppState>()(
       requestAIClue: async () => {
         const { game, profile, gameCancelled } = get();
         if (!game || gameCancelled) return;
+        const gameId = game.id;
 
         // Get AI clue for the user's team (AI is spymaster for user's team)
         const userTeam = game.settings.playerTeam === 'red' ? 'teamA' : 'teamB';
@@ -335,14 +337,16 @@ export const useAppState = create<AppState>()(
             game.turnHistory
           );
           
-          // Check if cancelled during API call
-          if (get().gameCancelled) return;
+          const current = get();
+          if (current.gameCancelled || current.game?.id !== gameId) return;
+          const currentGame = current.game;
+          if (!currentGame) return;
           
           const guessesAllowed = aiResponse.number === 0 || aiResponse.number === -1 ? 99 : aiResponse.number + 1;
 
           set({
             game: {
-              ...game,
+              ...currentGame,
               currentClue: { 
                 word: aiResponse.clue, 
                 number: aiResponse.number,
@@ -361,12 +365,13 @@ export const useAppState = create<AppState>()(
           });
         } catch (error) {
           console.error('Error getting AI clue:', error);
-          // Don't set fallback if cancelled
-          if (get().gameCancelled) return;
-          // Fallback clue
+          const current = get();
+          if (current.gameCancelled || current.game?.id !== gameId) return;
+          const currentGame = current.game;
+          if (!currentGame) return;
           set({
             game: {
-              ...game,
+              ...currentGame,
               currentClue: { word: 'HINT', number: 2 },
               currentPhase: 'guess',
               guessesRemaining: 3,
@@ -656,10 +661,9 @@ export const useAppState = create<AppState>()(
       processRivalTurn: async () => {
         const { game, gameCancelled } = get();
         if (!game || game.status !== 'playing') return;
-        if (gameCancelled) {
-          return;
-        }
-        
+        if (gameCancelled) return;
+        const gameId = game.id;
+
         // Only process if we're in clue phase
         if (game.currentPhase !== 'clue') return;
         
@@ -677,15 +681,15 @@ export const useAppState = create<AppState>()(
             game.turnHistory
           );
           
-          // Check if cancelled during API call
-          if (get().gameCancelled) {
-            return;
-          }
+          const current = get();
+          if (current.gameCancelled || current.game?.id !== gameId) return;
+          const currentGame = current.game;
+          if (!currentGame) return;
           
           // Set the clue and enter guess phase
           set({
             game: {
-              ...game,
+              ...currentGame,
               currentClue: { 
                 word: rivalResult.clue, 
                 number: rivalResult.number,
@@ -716,7 +720,7 @@ export const useAppState = create<AppState>()(
           // If rival AI decided to pass (no guesses), end turn immediately
           if (rivalResult.guesses.length === 0) {
             const { game: finalGame, gameCancelled: cancelled } = get();
-            if (finalGame && finalGame.status === 'playing' && !cancelled) {
+            if (finalGame && finalGame.id === gameId && finalGame.status === 'playing' && !cancelled) {
               get().endGuessingPhase();
             }
             return;
@@ -727,7 +731,7 @@ export const useAppState = create<AppState>()(
             await new Promise(resolve => setTimeout(resolve, 2500));
 
             const { game: updatedGame, gameCancelled: cancelled } = get();
-            if (!updatedGame || updatedGame.status === 'gameOver' || cancelled) {
+            if (!updatedGame || updatedGame.id !== gameId || updatedGame.status === 'gameOver' || cancelled) {
               break;
             }
 
@@ -749,13 +753,13 @@ export const useAppState = create<AppState>()(
           await new Promise(resolve => setTimeout(resolve, 1500));
           
           const { game: finalGame, gameCancelled: cancelled } = get();
-          if (finalGame && finalGame.status === 'playing' && !cancelled) {
+          if (finalGame && finalGame.id === gameId && finalGame.status === 'playing' && !cancelled) {
             get().endGuessingPhase();
           }
         } catch (error) {
           console.error('Error processing rival turn:', error);
-          // Fallback: end turn (only if not cancelled)
-          if (!get().gameCancelled) {
+          const current = get();
+          if (current.game && current.game.id === gameId && !current.gameCancelled) {
             get().endGuessingPhase();
           }
         }
